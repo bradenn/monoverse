@@ -2,9 +2,8 @@ package simulation
 
 import (
 	"fmt"
-	"github.com/bradenn/monoverse/graphics"
+	"github.com/bradenn/monoverse"
 	"github.com/bradenn/monoverse/physics"
-	"github.com/veandco/go-sdl2/sdl"
 )
 
 type Octree struct {
@@ -50,7 +49,7 @@ func (o *Octree) pushBody(body *physics.GBody) {
 	}
 }
 
-func (o *Octree) draw(frame *graphics.Frame, d int) {
+func (o *Octree) draw(frame *main.Frame, d int) {
 	//
 	//
 	// for i := 0.0; i <= 6; i+=1{
@@ -66,14 +65,14 @@ func (o *Octree) draw(frame *graphics.Frame, d int) {
 	//
 	// }
 
-	frame.Renderer.SetDrawBlendMode(sdl.BLENDMODE_BLEND)
-	frame.Renderer.SetDrawColor(255, 131, 0,
-		255)
-	frame.Panes[0].DrawPoint(graphics.Vertex3D{X: o.body.Location.X, Y: o.body.Location.Y, Z: o.body.Location.Z})
-	frame.Renderer.SetDrawColor(255, 131, 0,
-		64)
-	frame.Panes[0].DrawCube(graphics.Vertex3D{X: o.medium.X, Y: o.medium.Y, Z: o.medium.Z},
-		o.medium.w)
+	// frame.Renderer.SetDrawBlendMode(sdl.BLENDMODE_BLEND)
+	// frame.Renderer.SetDrawColor(255, 131, 0,
+	// 	255)
+	// frame.Panes[0].DrawPoint(graphics.Vertex3D{X: o.body.Location.X, Y: o.body.Location.Y, Z: o.body.Location.Z})
+	// frame.Renderer.SetDrawColor(255, 131, 0,
+	// 	64)
+	// frame.Panes[0].DrawCube(graphics.Vertex3D{X: o.medium.X, Y: o.medium.Y, Z: o.medium.Z},
+	// 	o.medium.w)
 
 	// engine.Renderer.SetDrawColor(0, 131, 255, 12)
 	// engine.DrawCube(graphics.Vertex3D{X: o.medium.X, Y: o.medium.Y, Z: o.medium.Z}, o.medium.w * 0.98)

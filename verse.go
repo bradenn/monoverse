@@ -7,8 +7,21 @@ import (
 
 type B bool
 type F1 float64
+
+type F2 struct {
+	X float64
+	Y float64
+}
+
 type F3 struct {
-	x, y, z F1
+	X float64
+	Y float64
+	Z float64
+}
+
+type Monoverse struct {
+	verses []*Verse
+	gfx    *Graphics
 }
 
 // Verse

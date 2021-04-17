@@ -2,13 +2,14 @@ package simulation
 
 import (
 	"fmt"
+	"github.com/bradenn/monoverse"
 	"github.com/bradenn/monoverse/graphics"
 	"github.com/bradenn/monoverse/physics"
+	"github.com/veandco/go-sdl2/sdl"
 	_ "github.com/veandco/go-sdl2/sdl"
 	"math"
 	"math/rand"
 	"syscall"
-	"time"
 )
 
 // Simulation [Renderer, Octree, State]
@@ -17,13 +18,22 @@ import (
 // 1 unit length / precision
 // 1 unit / 100 = smallest traversable distance = 0.01 units
 
-// Fastest Velocity Possible
-// 1 unit length / 1 iteration
-// 1 unit length /
+type B bool
+type F1 float64
 
+type F2 struct {
+	X float64
+	Y float64
+}
+
+type F3 struct {
+	X float64
+	Y float64
+	Z float64
+}
 type Simulation struct {
 	Engine *graphics.Engine
-	frame  *graphics.Frame
+	frame  *main.Frame
 	width  float64
 
 	delta float64
@@ -37,11 +47,11 @@ type Simulation struct {
 func NewSimulation() (s *Simulation) {
 	s = new(Simulation)
 	s.width = 1024
-	s.Engine, _ = graphics.NewEngine("Monoverse", int32(s.width+1), int32(s.width+1))
+	s.Engine, _ = graphics.NewEngine("Monoverse", int32(1920), int32(1080))
 	s.delta = 1
 	s.running = true
-	s.frame = graphics.NewFrame(s.Engine, s.width, s.width, 4, 3)
-	for i := 1; i < 16; i++ {
+	s.frame = main.NewFrame(s.Engine, 1920, 1080, 16, 9)
+	for i := 1; i < 256; i++ {
 		s.bodies = append(s.bodies, physics.NewBody(s.width/2-rand.Float64()*s.width, s.width/2-rand.Float64()*s.width, s.width/2-rand.Float64()*s.width,
 			rand.Float64()*100+100))
 	}
@@ -54,69 +64,111 @@ func (s *Simulation) Unload() {
 
 func (s *Simulation) Run() {
 
-	// buffer := make([]time.Duration, 0)
 	fmt.Println("== Beginning Simulation ==")
 	logicTicks := 0.0
 	clock := 0.0
 	logicInterval := 1000.0 / 60.0 // 15.625 ms
 	delta := 0.0
 
-	currTime := time.Now()
-	prevTime := time.Now()
+	currTime := sdl.GetTicks()
+	prevTime := sdl.GetTicks()
 
-	// start := time.Now()
-	s.frame.Panes[0].SetScale(1)
-	for s.Engine.Running {
+	pane := graphics.NewPane(s.Engine, "Simulation", graphics.F3{0, 0, 0}, graphics.F2{1440, 28})
+	pane2 := graphics.NewPane(s.Engine, "Monitor", graphics.F3{1440, 0, 0}, graphics.F2{480, 28})
+	pane4 := graphics.NewPane(s.Engine, "Interface", graphics.F3{Y: 28}, graphics.F2{1440, 1052})
+	pane3 := graphics.NewPane(s.Engine, "Statistics", graphics.F3{1440, 28, 0}, graphics.F2{480, 1052})
+
+	s.frame.Panes = append(s.frame.Panes, pane)
+	s.frame.Panes = append(s.frame.Panes, pane2)
+	s.frame.Panes = append(s.frame.Panes, pane3)
+
+	s.frame.Panes = append(s.frame.Panes, pane4)
+	renderClock := 0.0
+	for s.running {
 
 		prevTime = currTime
-		currTime = time.Now()
+		currTime = sdl.GetTicks()
 
-		delta = currTime.Sub(prevTime).Seconds() * 1000
+		rusage := new(syscall.Rusage)
+		syscall.Getrusage(0, rusage)
+
+		delta = float64(currTime - prevTime)
 		clock += delta
-		for clock > logicInterval {
-			s.clock += 1
+		if clock > logicInterval {
 			s.HandleEvents()
-			s.Engine.Clear()
+			s.frame.Clear()
 
-			rusage := new(syscall.Rusage)
-			syscall.Getrusage(0, rusage)
+			pane2.Renderer.UIText(fmt.Sprintf("%.2f FPS %.2f MB", 1000.0/delta, float64(rusage.Maxrss)/1024/1024), graphics.F3{
+				X: pane2.Renderer.Camera.Size.X - 144,
+				Y: pane2.Renderer.Camera.Size.Y/2 - 8,
+				Z: 0,
+			})
+			pane4.Camera.Rotation.X += math.Pi / 2048
+			pane4.Camera.Rotation.Y += math.Pi / 2048
 
-			s.frame.Panes[0].RotateXBy(math.Pi / 1024)
-			s.frame.Panes[0].RotateYBy(math.Pi / 1024)
+			pane4.Camera.Scale = 1
+			outer := 512.0
 
-			s.Engine.Window.SetTitle(fmt.Sprintf("%.2f FPS %.2f MB",
-				1000/delta, float64(rusage.Maxrss)/1024/1024))
-
-			s.Engine.Renderer.SetDrawColor(255, 255, 255, 255)
-			for n := 0.0; n < 10; n++ {
-				for m := 0.0; m < 10; m++ {
-					rad := 50.0 / 2.0
-					col := math.Sqrt(3.0) * rad
-					row := rad * 2.0
-					b := math.Mod(m, 2) == 0
-					if b {
-						s.frame.Panes[0].DrawHex(graphics.Vertex3D{
-							X: col * n,
-							Y: row * 3 / 4 * m,
-							Z: n}, rad)
-					} else {
-						s.frame.Panes[0].DrawHex(graphics.Vertex3D{
-							X: col*n + (rad) - 2,
-							Y: row * 3 / 4 * m,
-							Z: n}, rad)
-					}
-
+			pane4.Renderer.SetColor(255, 131, 0, 64)
+			for n := -1.0; n < 1; n += 0.1 {
+				if n == 0 {
+					pane4.Renderer.SetColor(255, 131, 0, 128)
+				} else {
+					pane4.Renderer.SetColor(255, 131, 0, 64)
 				}
 
+				pane4.Renderer.DrawLine(graphics.F3{-outer, n * outer, 0}, graphics.F3{outer, n * outer, 0})
+				pane4.Renderer.DrawLine(graphics.F3{n * outer, -outer, 0}, graphics.F3{n * outer, outer, 0})
+
+				pane4.Renderer.DrawLine(graphics.F3{-outer, 0, n * outer}, graphics.F3{outer, 0, n * outer})
+				pane4.Renderer.DrawLine(graphics.F3{n * outer, 0, -outer}, graphics.F3{n * outer, 0, outer})
+
+				pane4.Renderer.DrawLine(graphics.F3{0, -outer, n * outer}, graphics.F3{0, outer, n * outer})
+				pane4.Renderer.DrawLine(graphics.F3{0, n * outer, -outer}, graphics.F3{0, n * outer, outer})
 			}
+			pane4.Renderer.SetColor(255, 131, 0, 255)
+			for _, body := range s.bodies {
+
+				pane4.Renderer.DrawPoint(graphics.F3(body.Location))
+			}
+			s.frame.Render()
+			// s.Engine.Renderer.SetDrawColor(255, 128, 128, 255)
+			// pane4.Renderer.DrawLine(graphics.F3{0, 0, 0}, graphics.F3{64, 0, 0})
+			// s.Engine.Renderer.SetDrawColor(128, 255, 128, 255)
+			// pane4.Renderer.DrawLine(graphics.F3{0, 0, 0}, graphics.F3{0, 64, 0})
+			// s.Engine.Renderer.SetDrawColor(128, 128, 255, 255)
+			// pane4.Renderer.DrawLine(graphics.F3{0, 0, 0}, graphics.F3{0, 0, 64})
+
+			// for n := 0.0; n < 10; n++ {
+			// 	for m := 0.0; m < 10; m++ {
+			// 		rad := 50.0 / 2.0
+			// 		col := math.Sqrt(3.0) * rad
+			// 		row := rad * 2.0
+			// 		b := math.Mod(m, 2) == 0
+			// 		if b {
+			// 			pane4.Renderer.DrawHex(graphics.F3(graphics.Vertex3D{
+			// 				X: 200 + col * n,
+			// 				Y: 200 + row * 3 / 4 * m,
+			// 				Z: 0}), rad)
+			// 		} else {
+			// 			pane4.Renderer.DrawHex(graphics.F3(graphics.Vertex3D{
+			// 				X: 200 + col*n + (rad) - 2,
+			// 				Y: 200 + row * 3 / 4 * m,
+			// 				Z: 0}), rad)
+			// 		}
+			//
+			// 	}
+			//
+			// }
 
 			logicTicks += 1.0
 			clock -= logicInterval
-			s.Engine.Render()
-			// if logicTicks > 64.0 {
-			// 	running = false
-			// 	break
-			// }
+		}
+
+		renderClock += delta
+		if clock > 1000/24 {
+
+			renderClock = 0
 		}
 
 	}
@@ -200,7 +252,7 @@ func (s *Simulation) Run() {
 	//
 	// 		// s.frame.Panes[0].RotateXBy(math.Pi / 480)
 	// 		// s.frame.Panes[0].RotateYBy(math.Pi / 480)
-	// 		s.Engine.Window.SetTitle(fmt.Sprintf("%.2f FPS %.2f MB",
+	// 		s.Engine.View.SetTitle(fmt.Sprintf("%.2f FPS %.2f MB",
 	// 			1000.0/frameDelta, float64(rusage.Maxrss) / 1024 / 1024))
 	// 		s.Engine.Clear()
 	//
@@ -225,7 +277,17 @@ func (s *Simulation) Run() {
 }
 
 func (s *Simulation) HandleEvents() {
-	s.Engine.HandleEvents()
+	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		switch t := event.(type) {
+		case *sdl.QuitEvent:
+			s.running = false
+			break
+		case *sdl.KeyboardEvent:
+			break
+		case *sdl.MouseButtonEvent:
+			s.frame.HandleClick(graphics.F2{float64(t.X), float64(t.Y)})
+		}
+	}
 }
 
 func (s *Simulation) GetOuterBound() float64 {
