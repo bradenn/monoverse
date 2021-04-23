@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"github.com/go-gl/gl/v2.1/gl"
+	_ "github.com/nullboundary/glfont"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -9,7 +12,7 @@ type Graphics struct {
 	window   *sdl.Window
 	renderer *sdl.Renderer
 	font     *ttf.Font
-	frame    *Frame
+	ctx      sdl.GLContext
 	size     F3
 }
 
@@ -20,35 +23,256 @@ func NewGraphics(size F3) (g *Graphics, err error) {
 	return g, err
 }
 
+func (g *Graphics) RenderView(view View) {
+
+	gl.PushMatrix()
+
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.LoadIdentity()
+	gl.Enable(gl.BLEND)
+
+	// 	int32(view.GetSize().X*2),
+	// 	int32(view.GetSize().Y*2))
+	gl.Translatef(float32(view.GetLocation().X+2), float32(view.GetLocation().Y), 0)
+	// gl.Enable(gl.SCISSOR_TEST)
+	view.Draw(g)
+	// gl.Disable(gl.SCISSOR_TEST)
+	gl.Disable(gl.BLEND)
+	gl.PopMatrix()
+
+}
+func (g *Graphics) DrawFrame(name string, w View) {
+	g.ColorSecondary()
+	g.FillRect(F2{1, 1}, F2{w.GetSize().X - 2, 28 - 2})
+	g.ColorText()
+	g.Text(name, F2{8, 6})
+	g.ColorPrimary()
+	g.Rect(F2{1, 1}, F2{w.GetSize().X - 2, w.GetSize().Y - 2})
+	g.ColorPrimary()
+	g.Rect(F2{2, 2}, F2{w.GetSize().X - 4, w.GetSize().Y - 4})
+}
+
 func (g *Graphics) configure() error {
+
 	err := sdl.Init(sdl.INIT_EVERYTHING)
+	err = ttf.Init()
 
-	sdl.SetHint("HINT_FRAMEBUFFER_ACCELERATION", "3")
-	sdl.SetHint("HINT_RENDER_DRIVER", "metal")
-	sdl.SetHint("HINT_RENDER_VSYNC", "0")
-	sdl.SetHint("HINT_VIDEO_DOUBLE_BUFFER", "1")
-	sdl.SetHint("HINT_OVERRIDE", "1")
+	if err != nil {
+		return err
+	}
+	sdl.SetHint(sdl.HINT_RENDER_DRIVER, "metal")
 
+	sdl.GLSetAttribute(sdl.GL_DOUBLEBUFFER, 1)
+	sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 24)
+	fmt.Println(sdl.GetPerformanceFrequency())
 	g.window, err = sdl.CreateWindow("Monoverse - v0.12 beta", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
-		int32(g.size.X), int32(g.size.X), sdl.WINDOW_ALLOW_HIGHDPI)
-	g.renderer, err = sdl.CreateRenderer(g.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
+		int32(1+g.size.X), int32(1+g.size.Y), sdl.WINDOW_OPENGL|sdl.WINDOW_ALLOW_HIGHDPI)
 
-	// High DPI Scale
-	_ = g.renderer.SetLogicalSize(int32(g.size.X), int32(g.size.Y))
-	_ = g.renderer.SetScale(2, 2)
-	_ = g.renderer.SetDrawBlendMode(sdl.BLENDMODE_BLEND)
+	g.ctx, _ = g.window.GLCreateContext()
+	if err = gl.Init(); err != nil {
+		panic(err)
+	}
+
+	g.font = g.loadFont("JetBrainsMono-Medium.ttf", 24)
+
+	gl.Viewport(0, 0, int32(g.size.X*2), int32(g.size.Y*2))
+	gl.MatrixMode(gl.PROJECTION)
+	gl.LoadIdentity()
+	gl.Ortho(0, 3+g.size.X, 0+g.size.Y, 0, -1024, 1024)
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.LoadIdentity()
+
+	gl.Enable(gl.DOUBLEBUFFER)
+	sdl.GLSetSwapInterval(1)
+
 	return err
 }
 
-func (g *Graphics) Clear() {
-	err := g.renderer.Clear()
+func (g *Graphics) renderText(name string, location F3) {
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.Enable(gl.TEXTURE_2D)
+
+	surface, err := g.font.RenderUTF8Blended(name, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	defer func() { surface.Free() }()
 	if err != nil {
 		return
 	}
+
+	var textId uint32
+	gl.GenTextures(1, &textId)
+	gl.BindTexture(gl.TEXTURE_2D, textId)
+
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, surface.W,
+		surface.H, 0, gl.BGRA, gl.UNSIGNED_BYTE, surface.Data())
+
+	gl.PushMatrix()
+
+	gl.Translatef(float32(location.X), float32(location.Y), float32(location.Z))
+
+	gl.Begin(gl.QUADS)
+	gl.TexCoord2f(0, 0)
+	gl.Vertex2f(0, 0)
+
+	gl.TexCoord2f(1, 0)
+	gl.Vertex2f(float32(surface.W)/2, 0)
+
+	gl.TexCoord2f(1, 1)
+	gl.Vertex2f(float32(surface.W)/2, float32(surface.H)/2)
+
+	gl.TexCoord2f(0, 1)
+	gl.Vertex2f(0, float32(surface.H)/2)
+	gl.End()
+	gl.DeleteTextures(1, &textId) // Hehe, don't forget this
+	gl.PopMatrix()
+
+	gl.Disable(gl.TEXTURE_2D)
+	gl.Disable(gl.BLEND)
+
+	//
+
+}
+
+func (g *Graphics) loadFont(name string, scale float64) *ttf.Font {
+	font, err := ttf.OpenFont(name, int(scale))
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	return font
+}
+
+func (g *Graphics) Clear() {
+	gl.ClearColor(0, 0, 0, 1)
+	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	gl.Enable(gl.DEPTH_TEST)
+	gl.LineWidth(1)
+	gl.Enable(gl.BLEND)
+
 }
 
 func (g *Graphics) Render() {
-	g.renderer.Present()
+	gl.Disable(gl.BLEND)
+	g.Color(1, 1, 1, 1)
+	g.window.GLSwap()
+}
+
+func (g *Graphics) Text(m string, location F2) {
+	gl.PushMatrix()
+	g.renderText(m, F3{location.X, location.Y, 1})
+
+	gl.PopMatrix()
+}
+
+func (g *Graphics) Color(a, b, c, d float64) {
+	gl.Color4f(float32(a), float32(b), float32(c), float32(d))
+}
+func (g *Graphics) Rect(n F2, m F2) {
+
+	gl.Begin(gl.LINE_LOOP)
+	gl.Vertex3f(float32(n.X), float32(n.Y), 0)
+	// gl.Vertex3f(float32(n.X+m.X), float32(n.Y), 0)
+	gl.Vertex3f(float32(n.X+m.X), float32(n.Y), 0)
+	// gl.Vertex3f(float32(n.X+m.X), float32(n.Y+m.Y), 0)
+	gl.Vertex3f(float32(n.X+m.X), float32(n.Y+m.Y), 0)
+	// gl.Vertex3f(float32(n.X), float32(n.Y+m.Y), 0)
+	gl.Vertex3f(float32(n.X), float32(n.Y+m.Y), 0)
+	// gl.Vertex3f(float32(n.X), float32(n.Y), 0)
+	gl.End()
+}
+func (g *Graphics) FillRect(n F2, m F2) {
+	gl.Rectf(float32(n.X), float32(n.Y), float32(n.X+m.X), float32(n.Y+m.Y))
+}
+
+func (g *Graphics) Line(n F3, m F3) {
+	gl.Begin(gl.LINES)
+	gl.Vertex3f(float32(n.X), float32(n.Y), float32(n.Z))
+	gl.Vertex3f(float32(m.X), float32(m.Y), float32(m.Z))
+	gl.End()
+}
+
+func (g *Graphics) Cube(n F3, m F3) {
+	gl.PushMatrix()
+	gl.Enable(gl.BLEND)
+	gl.Enable(gl.DOUBLEBUFFER)
+	gl.Translatef(float32(n.X), float32(n.Y), float32(n.Z))
+	gl.Scalef(float32(m.X), float32(m.Y), float32(m.Z))
+
+	gl.Begin(gl.QUADS)
+
+	gl.Color3f(1.0, 1, 1) // Green
+	gl.Vertex3f(1.0, 1.0, -1.0)
+	gl.Vertex3f(-1.0, 1.0, -1.0)
+	gl.Vertex3f(-1.0, 1.0, 1.0)
+	gl.Vertex3f(1.0, 1.0, 1.0)
+
+	// Bottom face (y = -1.0)
+	gl.Color3f(1.0, 0.5, 0.0) // Orange
+	gl.Vertex3f(1.0, -1.0, 1.0)
+	gl.Vertex3f(-1.0, -1.0, 1.0)
+	gl.Vertex3f(-1.0, -1.0, -1.0)
+	gl.Vertex3f(1.0, -1.0, -1.0)
+
+	// Front face  (z = 1.0)
+	gl.Color3f(1.0, 0.0, 0.0) // Red
+	gl.Vertex3f(1.0, 1.0, 1.0)
+	gl.Vertex3f(-1.0, 1.0, 1.0)
+	gl.Vertex3f(-1.0, -1.0, 1.0)
+	gl.Vertex3f(1.0, -1.0, 1.0)
+
+	// Back face (z = -1.0)
+	gl.Color3f(1.0, 1.0, 0.0) // Yellow
+	gl.Vertex3f(1.0, -1.0, -1.0)
+	gl.Vertex3f(-1.0, -1.0, -1.0)
+	gl.Vertex3f(-1.0, 1.0, -1.0)
+	gl.Vertex3f(1.0, 1.0, -1.0)
+
+	// Left face (x = -1.0)
+	gl.Color3f(0.0, 0.0, 1.0) // Blue
+	gl.Vertex3f(-1.0, 1.0, 1.0)
+	gl.Vertex3f(-1.0, 1.0, -1.0)
+	gl.Vertex3f(-1.0, -1.0, -1.0)
+	gl.Vertex3f(-1.0, -1.0, 1.0)
+
+	// Right face (x = 1.0)
+	gl.Color3f(1.0, 0.0, 1.0) // Magenta
+	gl.Vertex3f(1.0, 1.0, -1.0)
+	gl.Vertex3f(1.0, 1.0, 1.0)
+	gl.Vertex3f(1.0, -1.0, 1.0)
+	gl.Vertex3f(1.0, -1.0, -1.0)
+	gl.End()
+
+	gl.Disable(gl.BLEND)
+	gl.Disable(gl.DOUBLEBUFFER)
+	gl.PopMatrix()
+}
+
+func (g *Graphics) ColorPrimary() {
+	color := 1 / 255.0
+	gl.Color4f(float32(color*66), float32(color*66), float32(color*66), 1)
+}
+func (g *Graphics) ColorSecondary() {
+	color := 1 / 255.0
+	gl.Color4f(float32(color*45), float32(color*45), float32(color*45), 1)
+}
+func (g *Graphics) ColorText() {
+	gl.Color4f(0.8, 0.8, 0.8, 1)
+}
+
+func (g *Graphics) HandleClick(location F2, button bool) {
+
+}
+
+func (g *Graphics) MakeViewport(location F2) {
+	gl.Viewport(int32(location.X), int32(location.Y), 400, 200)
+	gl.Ortho(0, 400, 200, 0, 12, 128)
+	gl.Rectf(0, 0, 400, 200)
 }
 
 func (g *Graphics) Cleanup() {
@@ -57,7 +281,20 @@ func (g *Graphics) Cleanup() {
 		panic(err)
 	}
 	err = g.renderer.Destroy()
+	sdl.GLDeleteContext(g.ctx)
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (g *Graphics) Push() {
+	gl.PushMatrix()
+}
+
+func (g *Graphics) Pop() {
+	gl.PopMatrix()
+}
+
+func (g *Graphics) Translate(f3 F3) {
+	gl.Translatef(float32(f3.X), float32(f3.Y), float32(f3.Z))
 }
