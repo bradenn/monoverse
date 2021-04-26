@@ -23,24 +23,67 @@ func NewGraphics(size F3) (g *Graphics, err error) {
 	return g, err
 }
 
+func (g *Graphics) configure() (err error) {
+
+	err = sdl.Init(sdl.INIT_EVERYTHING)
+	err = ttf.Init()
+
+	sdl.SetHint(sdl.HINT_RENDER_DRIVER, sdl.HINT_RENDER_OPENGL_SHADERS)
+
+	err = sdl.GLSetAttribute(sdl.GL_DOUBLEBUFFER, 1)
+	err = sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 24)
+
+	g.window, _ = sdl.CreateWindow("Monoverse - v0.12 beta", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
+		int32(g.size.X), int32(g.size.Y), sdl.WINDOW_OPENGL|sdl.WINDOW_ALLOW_HIGHDPI)
+	g.window.SetResizable(true)
+	g.ctx, _ = g.window.GLCreateContext()
+
+	err = gl.Init()
+
+	g.font = g.loadFont("JetBrainsMono-Medium.ttf", 24)
+
+	gl.Viewport(0, 0, int32(g.size.X*2), int32(g.size.Y*2))
+	gl.DepthRange(-2048, 2048)
+
+	gl.MatrixMode(gl.PROJECTION)
+	gl.LoadIdentity()
+
+	gl.Ortho(0, g.size.X, g.size.Y, 0, -2048, 2048)
+
+	gl.MatrixMode(gl.MODELVIEW)
+
+	gl.Enable(gl.DOUBLEBUFFER)
+
+	return nil
+}
+
 func (g *Graphics) RenderView(view View) {
 
 	gl.PushMatrix()
-
 	gl.MatrixMode(gl.MODELVIEW)
-	gl.LoadIdentity()
-	gl.Enable(gl.BLEND)
 
-	// 	int32(view.GetSize().X*2),
-	// 	int32(view.GetSize().Y*2))
-	gl.Translatef(float32(view.GetLocation().X+2), float32(view.GetLocation().Y), 0)
-	// gl.Enable(gl.SCISSOR_TEST)
+	gl.Translatef(float32(view.GetLocation().X), float32(view.GetLocation().Y), 0)
+
+	g.DrawFrame(view.GetName(), view)
+
+	// gl.Scissor(int32(view.GetLocation().X + 2)*2, int32(g.size.Y - view.GetLocation().Y)*2,
+	// 	int32(view.GetSize().X - 4)*2,
+	// 	int32(view.GetSize().Y - 28 - 1)*2)
+	location := view.GetLocation()
+	size := view.GetSize()
+	gl.Scissor(int32(location.X+2)*2, int32(g.size.Y-(location.Y+size.Y))*2, int32(size.X-4)*2, int32(size.Y)*2)
+	gl.Enable(gl.BLEND)
+	gl.Enable(gl.SCISSOR_TEST)
+
 	view.Draw(g)
-	// gl.Disable(gl.SCISSOR_TEST)
+
+	gl.Disable(gl.SCISSOR_TEST)
 	gl.Disable(gl.BLEND)
+
 	gl.PopMatrix()
 
 }
+
 func (g *Graphics) DrawFrame(name string, w View) {
 	g.ColorSecondary()
 	g.FillRect(F2{1, 1}, F2{w.GetSize().X - 2, 28 - 2})
@@ -52,48 +95,11 @@ func (g *Graphics) DrawFrame(name string, w View) {
 	g.Rect(F2{2, 2}, F2{w.GetSize().X - 4, w.GetSize().Y - 4})
 }
 
-func (g *Graphics) configure() error {
-
-	err := sdl.Init(sdl.INIT_EVERYTHING)
-	err = ttf.Init()
-
-	if err != nil {
-		return err
-	}
-	sdl.SetHint(sdl.HINT_RENDER_DRIVER, "metal")
-
-	sdl.GLSetAttribute(sdl.GL_DOUBLEBUFFER, 1)
-	sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 24)
-	fmt.Println(sdl.GetPerformanceFrequency())
-	g.window, err = sdl.CreateWindow("Monoverse - v0.12 beta", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
-		int32(1+g.size.X), int32(1+g.size.Y), sdl.WINDOW_OPENGL|sdl.WINDOW_ALLOW_HIGHDPI)
-
-	g.ctx, _ = g.window.GLCreateContext()
-	if err = gl.Init(); err != nil {
-		panic(err)
-	}
-
-	g.font = g.loadFont("JetBrainsMono-Medium.ttf", 24)
-
-	gl.Viewport(0, 0, int32(g.size.X*2), int32(g.size.Y*2))
-	gl.MatrixMode(gl.PROJECTION)
-	gl.LoadIdentity()
-	gl.Ortho(0, 3+g.size.X, 0+g.size.Y, 0, -1024, 1024)
-	gl.MatrixMode(gl.MODELVIEW)
-	gl.LoadIdentity()
-
-	gl.Enable(gl.DOUBLEBUFFER)
-	sdl.GLSetSwapInterval(1)
-
-	return err
-}
-
 func (g *Graphics) renderText(name string, location F3) {
 
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	gl.Enable(gl.TEXTURE_2D)
-
 	surface, err := g.font.RenderUTF8Blended(name, sdl.Color{R: 255, G: 255, B: 255, A: 255})
 	defer func() { surface.Free() }()
 	if err != nil {
@@ -197,6 +203,64 @@ func (g *Graphics) Line(n F3, m F3) {
 	gl.End()
 }
 
+func (g *Graphics) Tet(n F3, m F3) {
+	gl.PushMatrix()
+	gl.Enable(gl.BLEND)
+	gl.Translatef(float32(n.X), float32(n.Y), float32(n.Z))
+	gl.Scalef(float32(m.X), float32(m.Y), float32(m.Z))
+	cube := []float32{
+		-1.0, -1.0, -1.0, // triangle 1 : begin
+		-1.0, -1.0, 1.0,
+		-1.0, 1.0, 1.0, // triangle 1 : end
+		1.0, 1.0, -1.0, // triangle 2 : begin
+		-1.0, -1.0, -1.0,
+		-1.0, 1.0, -1.0, // triangle 2 : end
+		1.0, -1.0, 1.0,
+		-1.0, -1.0, -1.0,
+		1.0, -1.0, -1.0,
+		1.0, 1.0, -1.0,
+		1.0, -1.0, -1.0,
+		-1.0, -1.0, -1.0,
+		-1.0, -1.0, -1.0,
+		-1.0, 1.0, 1.0,
+		-1.0, 1.0, -1.0,
+		1.0, -1.0, 1.0,
+		-1.0, -1.0, 1.0,
+		-1.0, -1.0, -1.0,
+		-1.0, 1.0, 1.0,
+		-1.0, -1.0, 1.0,
+		1.0, -1.0, 1.0,
+		1.0, 1.0, 1.0,
+		1.0, -1.0, -1.0,
+		1.0, 1.0, -1.0,
+		1.0, -1.0, -1.0,
+		1.0, 1.0, 1.0,
+		1.0, -1.0, 1.0,
+		1.0, 1.0, 1.0,
+		1.0, 1.0, -1.0,
+		-1.0, 1.0, -1.0,
+		1.0, 1.0, 1.0,
+		-1.0, 1.0, -1.0,
+		-1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0,
+		-1.0, 1.0, 1.0,
+		1.0, -1.0, 1.0,
+	}
+
+	gl.Begin(gl.TRIANGLES)
+	for i := 0; i < len(cube)/3; i++ {
+		gl.Vertex3f(cube[i*3+0], cube[i*3+1], cube[i*3+2])
+	}
+	gl.End()
+
+	gl.Disable(gl.BLEND)
+	gl.PopMatrix()
+}
+
+func (g *Graphics) Sphere(n F3, m F3) {
+
+}
+
 func (g *Graphics) Cube(n F3, m F3) {
 	gl.PushMatrix()
 	gl.Enable(gl.BLEND)
@@ -206,42 +270,42 @@ func (g *Graphics) Cube(n F3, m F3) {
 
 	gl.Begin(gl.QUADS)
 
-	gl.Color3f(1.0, 1, 1) // Green
+	gl.Color3f(1.0, 1.0, 1.0) // Green
 	gl.Vertex3f(1.0, 1.0, -1.0)
 	gl.Vertex3f(-1.0, 1.0, -1.0)
 	gl.Vertex3f(-1.0, 1.0, 1.0)
 	gl.Vertex3f(1.0, 1.0, 1.0)
 
 	// Bottom face (y = -1.0)
-	gl.Color3f(1.0, 0.5, 0.0) // Orange
+	// gl.Color3f(1.0, 0.5, 0.0) // Orange
 	gl.Vertex3f(1.0, -1.0, 1.0)
 	gl.Vertex3f(-1.0, -1.0, 1.0)
 	gl.Vertex3f(-1.0, -1.0, -1.0)
 	gl.Vertex3f(1.0, -1.0, -1.0)
 
 	// Front face  (z = 1.0)
-	gl.Color3f(1.0, 0.0, 0.0) // Red
+	// gl.Color3f(1.0, 0.0, 0.0) // Red
 	gl.Vertex3f(1.0, 1.0, 1.0)
 	gl.Vertex3f(-1.0, 1.0, 1.0)
 	gl.Vertex3f(-1.0, -1.0, 1.0)
 	gl.Vertex3f(1.0, -1.0, 1.0)
 
 	// Back face (z = -1.0)
-	gl.Color3f(1.0, 1.0, 0.0) // Yellow
+	// gl.Color3f(1.0, 1.0, 0.0) // Yellow
 	gl.Vertex3f(1.0, -1.0, -1.0)
 	gl.Vertex3f(-1.0, -1.0, -1.0)
 	gl.Vertex3f(-1.0, 1.0, -1.0)
 	gl.Vertex3f(1.0, 1.0, -1.0)
 
 	// Left face (x = -1.0)
-	gl.Color3f(0.0, 0.0, 1.0) // Blue
+	// gl.Color3f(0.0, 0.0, 1.0) // Blue
 	gl.Vertex3f(-1.0, 1.0, 1.0)
 	gl.Vertex3f(-1.0, 1.0, -1.0)
 	gl.Vertex3f(-1.0, -1.0, -1.0)
 	gl.Vertex3f(-1.0, -1.0, 1.0)
 
 	// Right face (x = 1.0)
-	gl.Color3f(1.0, 0.0, 1.0) // Magenta
+	// gl.Color3f(1.0, 0.0, 1.0) // Magenta
 	gl.Vertex3f(1.0, 1.0, -1.0)
 	gl.Vertex3f(1.0, 1.0, 1.0)
 	gl.Vertex3f(1.0, -1.0, 1.0)

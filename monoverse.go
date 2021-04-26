@@ -45,8 +45,8 @@ func (m *Monoverse) Configure() {
 
 type Timer interface {
 	Configure()
-	TickCommence()
-	TickConclude()
+	TickCommence(float64)
+	TickConclude(float64)
 }
 
 type UpdateClock struct {
@@ -87,39 +87,42 @@ func (u *UpdateClock) Configure() {
 }
 
 func (m *Monoverse) Run() {
-	uc := new(UpdateClock)
-	uc.Configure()
-
-	rc := new(UpdateClock)
-	rc.Configure()
 
 	m.Configure()
+
 	verse := NewVerse("Verse", m.grid.GetLocation(F2{0, 0}), m.grid.GetSize(F2{10, 38}))
 	m.AddView(verse)
 
-	list := NewList("Scene Info", m.grid.GetLocation(F2{10, 4}), m.grid.GetSize(F2{2, 10}))
-	list.AddItem(NewItem("MaxRSS", "Anal Leisure"))
+	list := NewList("Scene Statistics", m.grid.GetLocation(F2{10, 7}), m.grid.GetSize(F2{2, 10}))
+	verse.stats = &list
 	m.AddView(&list)
 
 	widget := &fpsWidget{
 		location:    m.grid.GetLocation(F2{10, 0}),
-		size:        m.grid.GetSize(F2{2, 5}),
+		size:        m.grid.GetSize(F2{2, 7}),
 		updateDelta: 0,
 		renderDelta: 0,
 	}
 	m.AddView(widget)
 
+	perf := &Performance{
+		location: m.grid.GetLocation(F2{10, 17}),
+		size:     m.grid.GetSize(F2{2, 5}),
+	}
+	m.AddView(perf)
+
 	m.running = true
 
-	logicInterval := 1000.0 / 144.0 // ms
+	logicInterval := 1000.0 / 120.0 // ms
 	updateClock := 0.0
-	renderClock := 0.0
-	delta := 0.0
 
+	renderInterval := 1000.0 / 60.0 // ms
+	renderClock := 0.0
+
+	delta := 0.0
 	prevTime := 0.0
 
 	for m.running {
-		uc.TickCommence(float64(sdl.GetTicks()))
 		delta = float64(sdl.GetTicks()) - prevTime
 		prevTime = float64(sdl.GetTicks())
 
@@ -134,19 +137,19 @@ func (m *Monoverse) Run() {
 		}
 
 		renderClock += delta
-		if renderClock > (16.666) {
-			rc.TickCommence(float64(sdl.GetTicks()))
+		if renderClock > renderInterval {
 			m.HandleEvents()
 			m.graphics.Clear()
+
 			m.grid.Draw(m.graphics)
+
 			for _, view := range m.views {
 				m.graphics.RenderView(view)
 			}
+
 			m.graphics.Render()
-			rc.TickConclude(float64(sdl.GetTicks()))
 			renderClock = 0
 		}
-		uc.TickConclude(float64(sdl.GetTicks()))
 	}
 }
 
@@ -155,7 +158,7 @@ func (m *Monoverse) HandleEvents() {
 		for _, view := range m.views {
 			view.HandleEvent(event)
 		}
-		switch event.(type) {
+		switch t := event.(type) {
 		case *sdl.QuitEvent:
 			m.running = false
 			break
@@ -165,7 +168,10 @@ func (m *Monoverse) HandleEvents() {
 
 			break
 		case *sdl.MouseWheelEvent:
+		case *sdl.WindowEvent:
+			if t.Type == sdl.WINDOWEVENT_RESIZED {
 
+			}
 			break
 		}
 	}

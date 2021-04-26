@@ -21,6 +21,7 @@ type mvSolid interface {
 }
 
 type View interface {
+	GetName() string
 	GetLocation() F2
 	GetSize() F2
 	HandleEvent(event sdl.Event)
@@ -35,11 +36,18 @@ type fpsWidget struct {
 
 	updateLastTick time.Time
 	updateDelta    time.Duration
-	updateHistory  []time.Duration
+	updateHistory  []float64
 
 	renderLastTick time.Time
 	renderDelta    time.Duration
-	renderHistory  []time.Duration
+	renderHistory  []float64
+
+	rssPrev    float64
+	rssHistory []float64
+}
+
+func (f *fpsWidget) GetName() string {
+	return "FPS Monitor"
 }
 
 func (f *fpsWidget) HandleEvent(event sdl.Event) {
@@ -59,19 +67,24 @@ func (f *fpsWidget) Configure() {
 	f.renderLastTick = time.Now()
 }
 
+func MapF2(value float64, input F2, output F2) float64 {
+	return output.X + (output.Y-output.X)*((value-input.X)/(input.Y-input.X))
+}
+
 func (f *fpsWidget) Update() {
 	f.updateDelta = time.Duration(time.Since(f.updateLastTick).Nanoseconds())
-	f.updateHistory = append(f.updateHistory, f.updateDelta)
-	if len(f.updateHistory) > 120 {
-		f.updateHistory = f.updateHistory[1:]
+	f.updateHistory = append(f.updateHistory, f.updateDelta.Seconds())
+	if len(f.updateHistory) > 240 {
+		f.updateHistory = f.updateHistory[2:]
 	}
 	f.updateLastTick = time.Now()
 }
 
 func (f *fpsWidget) Draw(g *Graphics) {
+
 	f.renderDelta = time.Duration(time.Since(f.renderLastTick).Nanoseconds())
-	f.renderHistory = append(f.renderHistory, f.renderDelta)
-	if len(f.renderHistory) > 60 {
+	f.renderHistory = append(f.renderHistory, f.renderDelta.Seconds())
+	if len(f.renderHistory) > 120 {
 		f.renderHistory = f.renderHistory[1:]
 	}
 	f.renderLastTick = time.Now()
@@ -80,26 +93,112 @@ func (f *fpsWidget) Draw(g *Graphics) {
 
 	renAvg := 0.0
 	for _, it := range f.renderHistory {
-		renAvg += float64(it.Milliseconds())
+		renAvg += it * 1000
 	}
 	renAvg /= float64(len(f.renderHistory))
-	list.AddItem(NewItem("Render", fmt.Sprintf("%.2f FPS", 1000.0/renAvg)))
+	item := NewItem("Render", fmt.Sprintf("%.2f FPS", 1000.0/renAvg))
+	item.BindGraph(&f.renderHistory)
+	list.AddItem(item)
 
 	upsAvg := 0.0
 	for _, it := range f.updateHistory {
-		upsAvg += float64(it.Milliseconds())
+		upsAvg += it * 1000
 	}
 	upsAvg /= float64(len(f.updateHistory))
-	list.AddItem(NewItem("Update", fmt.Sprintf("%.2f UPS", 1000.0/upsAvg)))
-
+	item2 := NewItem("Update", fmt.Sprintf("%.2f UPS", 1000.0/upsAvg))
+	item2.BindGraph(&f.updateHistory)
+	list.AddItem(item2)
 	rusage := new(syscall.Rusage)
+
 	syscall.Getrusage(0, rusage)
+	f.rssHistory = append(f.rssHistory, MapF2(float64(rusage.Maxrss)/1024/1024, F2{30, 600}, F2{0, 0.1}))
+	if len(f.rssHistory) > 360 {
+		f.rssHistory = f.rssHistory[1:]
+	}
+	f.rssPrev = float64(rusage.Maxrss) / 1024 / 1024
 
-	list.AddItem(NewItem("MaxRSS", fmt.Sprintf("%.2f MB ", float64(rusage.Maxrss)/1024/1024)))
-
+	item3 := NewItem("MaxRSS", fmt.Sprintf("%.2f MB ", float64(rusage.Maxrss)/1024/1024))
+	item3.BindGraph(&f.rssHistory)
+	list.AddItem(item3)
+	list.AddItem(NewItem("Frame Duration", fmt.Sprintf("%.2f MS ", renAvg)))
+	list.AddItem(NewItem("Update Duration", fmt.Sprintf("%.2f MS ", upsAvg)))
 	list.Draw(g)
 }
 
 func (f *fpsWidget) GetBounds() (F2, F2) {
 	return f.location, f.size
+}
+
+type Clock interface {
+	GetTicks() float64
+	GetDelta() float64
+	GetRate() float64
+	Tick()
+}
+
+type PerformanceClock struct {
+	ticks    float64
+	delta    float64
+	rate     float64
+	previous float64
+}
+
+func (p *PerformanceClock) Tick() {
+	p.delta = float64(sdl.GetTicks()) - p.previous
+	p.previous = float64(sdl.GetTicks())
+	p.rate = 1000 / p.delta
+	p.ticks++
+}
+
+func (p *PerformanceClock) GetTicks() float64 {
+	return p.ticks
+}
+
+func (p *PerformanceClock) GetDelta() float64 {
+	return p.delta
+}
+
+func (p *PerformanceClock) GetRate() float64 {
+	return p.rate
+}
+
+type Performance struct {
+	location, size F2
+	clocks         []Clock
+}
+
+func (f *Performance) GetName() string {
+	return "Performance"
+}
+
+func (f *Performance) Configure() {
+	f.clocks = append(f.clocks, &PerformanceClock{}, &PerformanceClock{})
+
+}
+
+func (f *Performance) HandleEvent(event sdl.Event) {
+
+}
+
+func (f *Performance) GetLocation() F2 {
+	return f.location
+}
+
+func (f *Performance) GetSize() F2 {
+	return f.size
+}
+
+func (f *Performance) Update() {
+
+	f.clocks[0].Tick()
+}
+
+func (f *Performance) Draw(g *Graphics) {
+	f.clocks[1].Tick()
+	list := NewList("Performance", f.location, f.size)
+	render := NewItem("Render", fmt.Sprintf("%.2f FPS", f.clocks[1].GetRate()))
+	list.AddItem(render)
+	update := NewItem("Update", fmt.Sprintf("%.2f UPS", 1000/f.clocks[0].GetRate()))
+	list.AddItem(update)
+	list.Draw(g)
 }

@@ -13,16 +13,16 @@ type Grid struct {
 }
 
 func (g *Grid) Draw(graphics *Graphics) {
-	divX := g.size.X / g.cell.X
-	for i := 0.0; i < divX; i++ {
-		graphics.Color(0.1, 0.08, 0.08, 1)
-		graphics.Line(F3{(g.cell.X) * i, 0, 0}, F3{g.cell.X * i, g.size.Y, -1})
-	}
-	divY := g.size.Y / g.cell.Y
-	for i := 0.0; i < divY; i++ {
-		graphics.Color(0.1, 0.08, 0.08, 1)
-		graphics.Line(F3{0, (g.cell.Y) * i, 0}, F3{g.size.X, g.cell.Y * i, 2})
-	}
+	// divX := g.size.X / g.cell.X
+	// for i := 0.0; i < divX; i++ {
+	// 	graphics.Color(0.1, 0.08, 0.08, 1)
+	// 	graphics.Line(F3{(g.cell.X) * i, 0, 0}, F3{g.cell.X * i, g.size.Y, -1})
+	// }
+	// divY := g.size.Y / g.cell.Y
+	// for i := 0.0; i < divY; i++ {
+	// 	graphics.Color(0.1, 0.08, 0.08, 1)
+	// 	graphics.Line(F3{0, (g.cell.Y) * i, 0}, F3{g.size.X, g.cell.Y * i, 2})
+	// }
 }
 
 func (g *Grid) GetLocation(point F2) F2 {
@@ -58,6 +58,10 @@ type List struct {
 	size     F2
 }
 
+func (l *List) GetName() string {
+	return l.label
+}
+
 func NewList(label string, location F2, size F2) List {
 	return List{
 		label:    label,
@@ -90,7 +94,6 @@ func (l *List) AddItem(item *Item) {
 }
 
 func (l *List) Draw(g *Graphics) {
-	g.DrawFrame(l.label, l)
 	for _, item := range l.elements {
 		g.Translate(F3{0, 28, 0})
 		item.Draw(g, F2{l.size.X, float64(28)})
@@ -100,8 +103,13 @@ func (l *List) Draw(g *Graphics) {
 type Item struct {
 	label  string
 	value  string
+	graph  *[]float64
 	color  Color
 	indent int
+}
+
+func (u *Item) BindGraph(ptr *[]float64) {
+	u.graph = ptr
 }
 
 func DrawWindow(g *Graphics, name string, location F2, size F2) {
@@ -137,12 +145,24 @@ func NewItem(label string, value string) *Item {
 }
 
 func (u *Item) Draw(g *Graphics, size F2) {
+
 	color := 1 / 255.0
+	if u.graph != nil {
+		for i, p := range *u.graph {
+			if float64(i) <= size.X-4 {
+				g.Color(color*128, color*128, color*128, 0.6)
+				g.Line(F3{float64(i)*0.5 + 2, size.Y, 0}, F3{float64(i)*0.5 + 2, size.Y - p*1000, 0})
+			}
+
+		}
+	}
 	g.Color(color*66, color*66, color*66, 1)
 	g.Line(F3{1, size.Y, 0}, F3{size.X - 2, size.Y, 0})
 	g.Color(color*255, color*255, color*255, 1)
 	g.Text(u.label, F2{8, 6})
 	length, _, _ := g.font.SizeUTF8(u.value)
+
+	g.Color(color*255, color*255, color*255, 1)
 	g.Text(u.value, F2{size.X - float64(length/2) - 8, 6})
 }
 

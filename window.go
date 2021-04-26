@@ -60,7 +60,6 @@ func (w *Window) Update() {
 func (w *Window) Draw(g *Graphics) {
 	w.renderDelta = time.Duration(time.Since(w.renderLastTick).Nanoseconds())
 	w.renderLastTick = time.Now()
-	g.DrawFrame(w.title, w)
 }
 
 func (w *Window) GetBounds() (F2, F2) {
