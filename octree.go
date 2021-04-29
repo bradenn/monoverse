@@ -5,16 +5,17 @@ type Voxel struct {
 }
 
 func (v *Voxel) Draw(g *Graphics) {
-	g.Cube(v.location, v.size)
+	g.Tet(v.location, v.size)
 }
 
-func (v *Voxel) SubVoxel(n int) Voxel {
+func (v *Voxel) SubVoxel(n int) *Octree {
 
 	p := v.size.X / 4
 	q := v.size.Y / 4
 	r := v.size.Z / 4
 
-	vertices := []F3{
+	vertices := make([]F3, 0)
+	vertices = append(vertices,
 		F3{p, q, r},
 		F3{-p, q, r},
 		F3{p, q, -r},
@@ -22,18 +23,16 @@ func (v *Voxel) SubVoxel(n int) Voxel {
 		F3{p, -q, r},
 		F3{-p, -q, r},
 		F3{p, -q, -r},
-		F3{-p, -q, -r},
-	}
-
-	return Voxel{
+		F3{-p, -q, -r})
+	return &Octree{voxel: Voxel{
 		location: AddF3(v.location, vertices[n]),
 		size:     DivF3(v.size, F3{2, 2, 2}),
-	}
+	}}
 
 }
 
-func (v *Voxel) Contains(n F3) bool {
-
+func (v *Voxel) Contains(b Locatable) bool {
+	n := b.GetLocation()
 	xBound := n.X >= (v.location.X-v.size.X/2) && n.X <= (v.location.X+v.size.X/2)
 	yBound := n.Y >= (v.location.Y-v.size.Y/2) && n.Y <= (v.location.Y+v.size.Y/2)
 	zBound := n.Z >= (v.location.Z-v.size.Z/2) && n.Z <= (v.location.Z+v.size.Z/2)
@@ -53,50 +52,72 @@ type Octree struct {
 	children []*Octree
 }
 
-func (o *Octree) ApplyForces(object *Object) {
+func (o *Octree) ApplyForces(force Force, object Object) {
 	physics := Physics{}
 	if o.node != nil {
-		if o.children != nil {
-			if o.node != *object {
-				physics.AddForce(*object, o.node)
+		if o.children == nil { // External Node
+			if o.node != object {
+				object.SetForce(physics.AddForce(force, object, o.node))
 			}
-		} else {
-			theta := o.voxel.size.X / physics.Distance(*object, o.node)
+		} else { // Internal Node
+			theta := (o.voxel.size.X) / Distance(o.node, object)
 			if theta < 0.9 {
-				physics.AddForce(*object, o.node)
+				object.SetForce(physics.AddForce(force, object, o.node))
 			} else {
 				for _, child := range o.children {
-					child.ApplyForces(object)
+					child.ApplyForces(force, object)
 				}
 			}
 		}
 	}
 }
 
-func (o *Octree) Insert(object Object) {
-	// 1. If the node is empty, fill it and birth virgins.
-	if o.node == nil {
-		o.node = object
-		o.Subdivide()
-		// 2. If its not empty, mail it to the right kids.
-	} else {
-		for _, node := range o.children {
-			if node.voxel.Contains(object.GetLocation()) {
-				node.Insert(object)
-			}
+func (o *Octree) Draw(g *Graphics) {
+	if o.node != nil {
+		g.Color(0.4, 0.4, 0.4, 0.4)
+		o.voxel.Draw(g)
+	}
+	if o.children != nil {
+		for _, child := range o.children {
+			child.Draw(g)
 		}
 	}
-	// 3. Make a copy and add it to your own mass and location before mailing it.
-	physics := Physics{}
-	physics.AddBody(o.node, object)
+}
 
-	// 4. Take a hit!
+func (o *Octree) Push(object Object) {
+	o.Subdivide()
+	for _, node := range o.children {
+		if node.voxel.Contains(object) {
+			node.Insert(object)
+			return
+		}
+	}
+
+}
+
+func (o *Octree) Insert(object Object) {
+	if o.node == nil {
+		o.node = object
+		return
+	} else if len(o.children) < 8 {
+		// External Node
+		o.Push(o.node)
+	} else {
+		// Internal Node
+
+	}
+
+	physics := Physics{}
+	ss := physics.AddBody(o.node, object)
+	o.node = ss
+	o.Push(object)
 }
 
 func (o *Octree) Subdivide() {
-	if len(o.children) < 8 {
+	if o.children == nil {
+		o.children = make([]*Octree, 8)
 		for i := 0; i < 8; i++ {
-			o.voxel.SubVoxel(i)
+			o.children[i] = o.voxel.SubVoxel(i)
 		}
 	}
 }

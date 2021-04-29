@@ -7,7 +7,6 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 	"math"
 	"math/rand"
-	"time"
 )
 
 // Verse
@@ -20,15 +19,31 @@ type Verse struct {
 	ticks       F1
 	radius      F1
 	matter      []*Matter
+	force       []Force
 	window      *Window
+	octree      *Octree
 	stats       *List
 	clocks      F2
 	location    F2
 	perspective F3
 	rotation    F3
 	size        F2
+	physics     *Physics
+	cursor      *Cursor
+	timer       *Timer
 }
 
+type Cursor struct {
+	location F3
+}
+
+func (v *Cursor) Select(f F2) {
+	v.location = F3{f.X, f.Y, 0}
+}
+func (v *Cursor) Draw(g *Graphics) {
+	g.Color(0.5, 0.8, 1, 0.8)
+	g.Tet(v.location, F3{64, 64, 64})
+}
 func (v *Verse) GetName() string {
 	return v.name
 }
@@ -49,6 +64,9 @@ func NewVerse(name string, location F2, size F2) *Verse {
 func (v *Verse) HandleEvent(event sdl.Event) {
 	switch t := event.(type) {
 	case *sdl.MouseButtonEvent:
+		if t.Button == sdl.BUTTON_LEFT {
+			v.cursor.Select(F2{float64(t.X), float64(t.Y)})
+		}
 		break
 	case *sdl.MouseMotionEvent:
 		if t.State == 1 {
@@ -78,22 +96,22 @@ func (v *Verse) GetSize() F2 {
 }
 
 func (v *Verse) Configure() {
-	diam := 2048.0
-	for x := 0.0; x < 500; x += 1 {
+	diam := 1024.0
+	for x := 0.0; x < 256; x += 1 {
 		matter := new(Matter)
-		matter.mass = 10000
-		matter.location = F3{(diam / 2) - rand.Float64()*(diam), (diam / 2) - rand.Float64()*(diam),
-			(diam / 2) - rand.Float64()*(diam)}
+		matter.mass = 1000 * rand.Float64()
+		matter.location = F3{diam/2 - rand.Float64()*(diam), diam/2 - rand.Float64()*(diam),
+			diam/2 - rand.Float64()*(diam)}
 		v.matter = append(v.matter, matter)
 	}
-
+	v.cursor = new(Cursor)
+	v.cursor.location = F3{}
 	v.perspective.Z = 1
+
 }
 
 func (v *Verse) Draw(g *Graphics) {
-
 	gl.PopMatrix()
-	// perspective
 
 	v.stats.elements = []*Item{
 		NewItem("Camera", ""),
@@ -110,6 +128,7 @@ func (v *Verse) Draw(g *Graphics) {
 	v.perspective.Y += (-v.perspective.Y) / 60
 
 	gl.PushMatrix()
+
 	gl.MatrixMode(gl.MODELVIEW)
 	gl.PushMatrix()
 	gl.Translatef(2, 28, 0)
@@ -121,7 +140,6 @@ func (v *Verse) Draw(g *Graphics) {
 	gl.Vertex3f(float32(v.size.X), float32(v.size.Y), -2040)
 	gl.Vertex3f(float32(v.size.X), 0, -2040)
 	gl.End()
-
 	gl.PushMatrix()
 
 	gl.Translatef(float32(v.size.X-64), 64, 64)
@@ -195,89 +213,55 @@ func (v *Verse) Draw(g *Graphics) {
 	gl.Vertex3f(0, 0, diam)
 
 	gl.End()
+	gl.Color4f(1, 1, 1, 1)
 
 	for _, mass := range v.matter {
 		mass.Draw(g)
 	}
+	if v.octree != nil {
+		// v.octree.Draw(g)
+
+	}
+	//
+	// gl.Color4f(0.9, 0.3, 0.7, 0.4)
+	// g.Circle(F3{0, 0, 0}, F3{800, 800, 0})
 
 	gl.Disable(gl.BLEND)
 	gl.PopMatrix()
 
 	gl.PopMatrix()
-
+	v.cursor.Draw(g)
 	return
 }
 
 func (v *Verse) Update() {
-	// v.updateDelta = time.Duration(time.Since(v.updateLastTick).Nanoseconds())
-	// v.updateLastTick = time.Now()
-	//
-	diam := 1024.0
-	octree := Octree{
-		node:     nil,
-		voxel:    Voxel{F3{0, 0, 0}, F3{diam * 2, diam * 2, diam * 2}},
-		children: nil,
+	v.timer.Begin("Update")
+
+	v.timer.Flag("Physics")
+	v.ticks += 0.1
+	v.octree = &Octree{voxel: Voxel{
+		location: F3{0, 0, 0},
+		size:     F3{1024, 1024, 1024},
+	}}
+
+	v.timer.Flag("Matter")
+	for _, mass := range v.matter {
+		v.physics.ResetForces(mass)
+		v.octree.Insert(mass)
+	}
+	v.timer.Flag("Gravity")
+	for _, mass := range v.matter {
+		for _, force := range v.physics.forces {
+			v.octree.ApplyForces(force, mass)
+		}
 	}
 
-	// 1. Insert all objects into the tree
-	for _, object := range v.matter {
-		phys := Physics{}
-		phys.ResetForces(object)
-		octree.Insert(object)
-	}
-	// 2. Recursively find all forces acting on each object
-	// for _, object := range v.matter {
-	// 	// octree.ApplyForces(object)
-	// }
-	// 3. Apply those forces to the object & Apply tick
-	v.ticks++
-	for _, object := range v.matter {
-		physics := Physics{}
-		physics.UpdatePosition(object, float64(v.ticks))
+	v.timer.Flag("Updating")
+	for _, mass := range v.matter {
+		loc, vel := v.physics.UpdatePosition(mass, float64(v.ticks))
+		mass.SetLocation(loc)
+		mass.SetVelocity(vel)
 	}
 
-}
-
-func (v *Verse) computeIteration() (err error) {
-
-	return
-
-}
-
-type Entropy struct {
-	ticks    F1
-	complete B
-	step     F1
-	relative F1
-	start    time.Time
-}
-
-func NewEntropy() *Entropy {
-	entropy := &Entropy{ticks: 0.0, step: 1.0, start: time.Now()}
-
-	return entropy
-}
-
-func (e *Entropy) Print() {
-	fmt.Printf("%f ticks, %f seconds", e.ticks, e.relative)
-}
-
-func (e *Entropy) Available() B {
-	if e.complete {
-		e.complete = false
-		return true
-	} else {
-		fmt.Errorf("%s", "Tick Courrupted")
-	}
-	return true
-}
-
-func (e *Entropy) Ticks() F1 {
-	return e.ticks
-}
-
-func (e *Entropy) Tick() {
-	e.ticks += e.step
-	e.complete = true
-	e.relative = F1(time.Since(e.start).Seconds())
+	v.timer.End()
 }

@@ -47,7 +47,7 @@ type fpsWidget struct {
 }
 
 func (f *fpsWidget) GetName() string {
-	return "FPS Monitor"
+	return "Performance"
 }
 
 func (f *fpsWidget) HandleEvent(event sdl.Event) {
@@ -74,8 +74,8 @@ func MapF2(value float64, input F2, output F2) float64 {
 func (f *fpsWidget) Update() {
 	f.updateDelta = time.Duration(time.Since(f.updateLastTick).Nanoseconds())
 	f.updateHistory = append(f.updateHistory, f.updateDelta.Seconds())
-	if len(f.updateHistory) > 240 {
-		f.updateHistory = f.updateHistory[2:]
+	if len(f.updateHistory) > 240*2 {
+		f.updateHistory = f.updateHistory[1:]
 	}
 	f.updateLastTick = time.Now()
 }
@@ -84,7 +84,7 @@ func (f *fpsWidget) Draw(g *Graphics) {
 
 	f.renderDelta = time.Duration(time.Since(f.renderLastTick).Nanoseconds())
 	f.renderHistory = append(f.renderHistory, f.renderDelta.Seconds())
-	if len(f.renderHistory) > 120 {
+	if len(f.renderHistory) > 120*2 {
 		f.renderHistory = f.renderHistory[1:]
 	}
 	f.renderLastTick = time.Now()
@@ -97,7 +97,7 @@ func (f *fpsWidget) Draw(g *Graphics) {
 	}
 	renAvg /= float64(len(f.renderHistory))
 	item := NewItem("Render", fmt.Sprintf("%.2f FPS", 1000.0/renAvg))
-	item.BindGraph(&f.renderHistory)
+
 	list.AddItem(item)
 
 	upsAvg := 0.0
@@ -106,19 +106,18 @@ func (f *fpsWidget) Draw(g *Graphics) {
 	}
 	upsAvg /= float64(len(f.updateHistory))
 	item2 := NewItem("Update", fmt.Sprintf("%.2f UPS", 1000.0/upsAvg))
-	item2.BindGraph(&f.updateHistory)
+
 	list.AddItem(item2)
 	rusage := new(syscall.Rusage)
 
 	syscall.Getrusage(0, rusage)
-	f.rssHistory = append(f.rssHistory, MapF2(float64(rusage.Maxrss)/1024/1024, F2{30, 600}, F2{0, 0.1}))
+	f.rssHistory = append(f.rssHistory, float64(rusage.Maxrss)/1024/1024)
 	if len(f.rssHistory) > 360 {
 		f.rssHistory = f.rssHistory[1:]
 	}
 	f.rssPrev = float64(rusage.Maxrss) / 1024 / 1024
 
 	item3 := NewItem("MaxRSS", fmt.Sprintf("%.2f MB ", float64(rusage.Maxrss)/1024/1024))
-	item3.BindGraph(&f.rssHistory)
 	list.AddItem(item3)
 	list.AddItem(NewItem("Frame Duration", fmt.Sprintf("%.2f MS ", renAvg)))
 	list.AddItem(NewItem("Update Duration", fmt.Sprintf("%.2f MS ", upsAvg)))

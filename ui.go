@@ -1,6 +1,8 @@
 package main
 
-import "github.com/veandco/go-sdl2/sdl"
+import (
+	"github.com/veandco/go-sdl2/sdl"
+)
 
 const (
 	menuX = 16
@@ -10,6 +12,10 @@ const (
 type Grid struct {
 	size F2
 	cell F2
+}
+
+func (g *Grid) GetBounds(n F2, m F2) Bounds {
+	return Bounds{g.GetLocation(n), g.GetSize(m)}
 }
 
 func (g *Grid) Draw(graphics *Graphics) {
@@ -95,8 +101,8 @@ func (l *List) AddItem(item *Item) {
 
 func (l *List) Draw(g *Graphics) {
 	for _, item := range l.elements {
-		g.Translate(F3{0, 28, 0})
 		item.Draw(g, F2{l.size.X, float64(28)})
+		g.Translate(F3{0, 28, 0})
 	}
 }
 
@@ -151,7 +157,7 @@ func (u *Item) Draw(g *Graphics, size F2) {
 		for i, p := range *u.graph {
 			if float64(i) <= size.X-4 {
 				g.Color(color*128, color*128, color*128, 0.6)
-				g.Line(F3{float64(i)*0.5 + 2, size.Y, 0}, F3{float64(i)*0.5 + 2, size.Y - p*1000, 0})
+				g.Line(F3{float64(i)*0.5 + 2, size.Y, 0}, F3{float64(i)*0.5 + 2, size.Y - p*size.Y, 0})
 			}
 
 		}

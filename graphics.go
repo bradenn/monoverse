@@ -6,6 +6,7 @@ import (
 	_ "github.com/nullboundary/glfont"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
+	"math"
 )
 
 type Graphics struct {
@@ -30,8 +31,11 @@ func (g *Graphics) configure() (err error) {
 
 	sdl.SetHint(sdl.HINT_RENDER_DRIVER, sdl.HINT_RENDER_OPENGL_SHADERS)
 
+	err = sdl.GLSetAttribute(sdl.GL_ACCELERATED_VISUAL, 1)
+	err = sdl.GLSetAttribute(sdl.GL_BUFFER_SIZE, 8)
 	err = sdl.GLSetAttribute(sdl.GL_DOUBLEBUFFER, 1)
-	err = sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 24)
+	err = sdl.GLSetAttribute(sdl.GL_DEPTH_SIZE, 2048)
+	err = sdl.GLSetAttribute(sdl.GL_MULTISAMPLESAMPLES, 8)
 
 	g.window, _ = sdl.CreateWindow("Monoverse - v0.12 beta", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
 		int32(g.size.X), int32(g.size.Y), sdl.WINDOW_OPENGL|sdl.WINDOW_ALLOW_HIGHDPI)
@@ -57,6 +61,14 @@ func (g *Graphics) configure() (err error) {
 	return nil
 }
 
+func (g *Graphics) Circle(n F3, m F3) {
+	gl.Begin(gl.LINES)
+	for r := 0.0; r < 720; r++ {
+		gl.Vertex3f(float32(n.X+math.Cos(r)*m.X), float32(n.Y+math.Sin(r)*m.Y), float32(n.Z))
+	}
+	gl.End()
+}
+
 func (g *Graphics) RenderView(view View) {
 
 	gl.PushMatrix()
@@ -66,12 +78,16 @@ func (g *Graphics) RenderView(view View) {
 
 	g.DrawFrame(view.GetName(), view)
 
-	// gl.Scissor(int32(view.GetLocation().X + 2)*2, int32(g.size.Y - view.GetLocation().Y)*2,
-	// 	int32(view.GetSize().X - 4)*2,
-	// 	int32(view.GetSize().Y - 28 - 1)*2)
+	// 	gl.Scissor(int32(view.GetLocation().X + 2)*2, int32((view.GetLocation().Y  + g.size.Y) - view.GetLocation().Y)*2,
+	//		int32(view.GetSize().X - 4)*2,
+	//		int32(view.GetSize().Y - 28 - 1)*2)
 	location := view.GetLocation()
 	size := view.GetSize()
-	gl.Scissor(int32(location.X+2)*2, int32(g.size.Y-(location.Y+size.Y))*2, int32(size.X-4)*2, int32(size.Y)*2)
+	gl.Translatef(0, 28, 0)
+	// gl.Scissor(0, 0, int32(size.X)*2,
+	// 	int32(size.Y)*2)
+	gl.Scissor(int32(location.X+2)*2, int32((g.size.Y-(location.Y))-size.Y-25)*2, int32(size.X)*2,
+		int32(size.Y)*2)
 	gl.Enable(gl.BLEND)
 	gl.Enable(gl.SCISSOR_TEST)
 
@@ -90,9 +106,60 @@ func (g *Graphics) DrawFrame(name string, w View) {
 	g.ColorText()
 	g.Text(name, F2{8, 6})
 	g.ColorPrimary()
-	g.Rect(F2{1, 1}, F2{w.GetSize().X - 2, w.GetSize().Y - 2})
+	g.Rect(F2{1, 1}, F2{w.GetSize().X - 2, w.GetSize().Y - 2 + 28})
 	g.ColorPrimary()
-	g.Rect(F2{2, 2}, F2{w.GetSize().X - 4, w.GetSize().Y - 4})
+	g.Rect(F2{2, 2}, F2{w.GetSize().X - 4, w.GetSize().Y - 4 + 28})
+}
+
+func (g *Graphics) renderTextCenter(name string, location F3) {
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	gl.Enable(gl.TEXTURE_2D)
+	surface, err := g.font.RenderUTF8Blended(name, sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	defer func() { surface.Free() }()
+	if err != nil {
+		return
+	}
+
+	var textId uint32
+	gl.GenTextures(1, &textId)
+	gl.BindTexture(gl.TEXTURE_2D, textId)
+
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, surface.W,
+		surface.H, 0, gl.BGRA, gl.UNSIGNED_BYTE, surface.Data())
+
+	gl.PushMatrix()
+
+	gl.Translatef(float32(location.X-float64(surface.W/4)), float32(location.Y-float64(surface.H/4)),
+		float32(location.Z))
+
+	gl.Begin(gl.QUADS)
+	gl.TexCoord2f(0, 0)
+	gl.Vertex2f(0, 0)
+
+	gl.TexCoord2f(1, 0)
+	gl.Vertex2f(float32(surface.W)/2, 0)
+
+	gl.TexCoord2f(1, 1)
+	gl.Vertex2f(float32(surface.W)/2, float32(surface.H)/2)
+
+	gl.TexCoord2f(0, 1)
+	gl.Vertex2f(0, float32(surface.H)/2)
+	gl.End()
+	gl.DeleteTextures(1, &textId) // Hehe, don't forget this
+	gl.PopMatrix()
+
+	gl.Disable(gl.TEXTURE_2D)
+	gl.Disable(gl.BLEND)
+
+	//
+
 }
 
 func (g *Graphics) renderText(name string, location F3) {
@@ -176,6 +243,20 @@ func (g *Graphics) Text(m string, location F2) {
 	gl.PopMatrix()
 }
 
+func (g *Graphics) TextCenter(m string, location F2) {
+	gl.PushMatrix()
+	g.renderTextCenter(m, F3{location.X, location.Y, 1})
+
+	gl.PopMatrix()
+}
+
+func (g *Graphics) TextCenter3D(m string, location F3) {
+	gl.PushMatrix()
+	g.renderTextCenter(m, location)
+
+	gl.PopMatrix()
+}
+
 func (g *Graphics) Color(a, b, c, d float64) {
 	gl.Color4f(float32(a), float32(b), float32(c), float32(d))
 }
@@ -203,7 +284,7 @@ func (g *Graphics) Line(n F3, m F3) {
 	gl.End()
 }
 
-func (g *Graphics) Tet(n F3, m F3) {
+func (g *Graphics) WireCube(n F3, m F3) {
 	gl.PushMatrix()
 	gl.Enable(gl.BLEND)
 	gl.Translatef(float32(n.X), float32(n.Y), float32(n.Z))
@@ -247,9 +328,50 @@ func (g *Graphics) Tet(n F3, m F3) {
 		1.0, -1.0, 1.0,
 	}
 
-	gl.Begin(gl.TRIANGLES)
+	gl.Begin(gl.LINE_LOOP)
 	for i := 0; i < len(cube)/3; i++ {
 		gl.Vertex3f(cube[i*3+0], cube[i*3+1], cube[i*3+2])
+	}
+	gl.End()
+
+	gl.Disable(gl.BLEND)
+	gl.PopMatrix()
+}
+
+func (g *Graphics) Tet(n F3, m F3) {
+	gl.PushMatrix()
+	gl.Enable(gl.BLEND)
+	gl.Translatef(float32(n.X), float32(n.Y), float32(n.Z))
+	gl.Scalef(float32(m.X/2), float32(m.Y/2), float32(m.Z/2))
+	vertices := [][]float64{
+		{1, 1, 1}, {1, 1, -1},
+		{1, 1, 1}, {-1, 1, 1},
+
+		{1, 1, 1}, {1, -1, 1},
+		{-1, -1, -1}, {1, -1, -1},
+
+		{-1, -1, -1}, {-1, -1, 1},
+		{-1, -1, -1}, {-1, 1, -1},
+
+		{-1, 1, -1}, {1, 1, -1},
+		{-1, 1, -1}, {-1, 1, 1},
+
+		{-1, 1, -1}, {-1, 1, 1},
+		{-1, -1, 1}, {-1, 1, 1},
+
+		{-1, -1, 1}, {-1, 1, 1},
+		{-1, -1, 1}, {1, -1, 1},
+
+		{1, -1, -1}, {1, -1, 1},
+		{1, -1, -1}, {1, 1, -1},
+
+		{-1, -1, 1}, {1, -1, 1},
+		{-1, 1, 1}, {1, 1, 1},
+	}
+	gl.Begin(gl.LINES)
+	for i := 0; i < len(vertices); i += 1 {
+
+		gl.Vertex3f(float32(vertices[i][0]), float32(vertices[i][1]), float32(vertices[i][2]))
 	}
 	gl.End()
 

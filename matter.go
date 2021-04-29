@@ -1,16 +1,36 @@
 package main
 
+import "github.com/go-gl/gl/v2.1/gl"
+
 type Matter struct {
 	location, velocity, force F3
 	mass, density, volume     float64
 }
 
+func (m *Matter) GetCharge() float64 {
+	panic("implement me")
+}
+
+func (m *Matter) SetCharge(f float64) {
+	panic("implement me")
+}
+
 func (m *Matter) GetMass() float64 {
 	return m.mass
 }
+
 func (m *Matter) Draw(g *Graphics) {
-	g.Color(1, 1, 1, 1)
-	g.Tet(m.location, F3{2, 2, 2})
+	gl.PushMatrix()
+	g.Color(MapF2(m.GetMass(), F2{200, 10000}, F2{0, 0.8}), 0.8, 0.8, 1)
+	sz := MapF2(m.GetMass(), F2{200, 10000}, F2{1, 24})
+	gl.Translatef(float32(m.location.X), float32(m.location.Y), float32(m.location.Z))
+	g.Tet(F3{}, F3{sz, sz, sz})
+	gl.Begin(gl.LINES)
+	gl.Vertex3f(0, 0, 0)
+	gl.Vertex3f(float32(MapF2(m.force.X, F2{0, 1e-7}, F2{0, 8})), float32(MapF2(m.force.Y, F2{0, 1e-7}, F2{0, 8})),
+		float32(MapF2(m.force.Z, F2{0, 1e-7}, F2{0, 8})))
+	gl.End()
+	gl.PopMatrix()
 }
 
 func (m *Matter) SetMass(f float64) {

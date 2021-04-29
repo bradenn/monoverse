@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/veandco/go-sdl2/sdl"
+	"sync"
 	"time"
 )
 
@@ -41,13 +42,41 @@ func (m *Monoverse) Configure() {
 		cell: F2{1920 / 12, 28},
 	}
 	m.graphics, _ = NewGraphics(F3{w, h, 0})
+
+	verse := NewVerse("Verse", m.grid.GetLocation(F2{0, 0}), m.grid.GetSize(F2{10, 32}))
+	m.AddView(verse)
+
+	list := NewList("Scene Statistics", m.grid.GetLocation(F2{10, 30}), m.grid.GetSize(F2{2, 7}))
+	verse.stats = &list
+	m.AddView(&list)
+
+	physics := &Physics{
+		location: m.grid.GetLocation(F2{10, 6}),
+		size:     m.grid.GetSize(F2{2, 24}),
+	}
+	verse.physics = physics
+	m.AddView(physics)
+
+	timer := &Timer{
+		bounds: m.grid.GetBounds(F2{0, 33}, F2{10, 4}),
+	}
+	verse.timer = timer
+	m.AddView(timer)
+
+	widget := &fpsWidget{
+		location:    m.grid.GetLocation(F2{10, 0}),
+		size:        m.grid.GetSize(F2{2, 6}),
+		updateDelta: 0,
+		renderDelta: 0,
+	}
+	m.AddView(widget)
 }
 
-type Timer interface {
-	Configure()
-	TickCommence(float64)
-	TickConclude(float64)
-}
+// type Timer interface {
+// 	Configure()
+// 	TickCommence(float64)
+// 	TickConclude(float64)
+// }
 
 type UpdateClock struct {
 	inner      float64
@@ -90,53 +119,37 @@ func (m *Monoverse) Run() {
 
 	m.Configure()
 
-	verse := NewVerse("Verse", m.grid.GetLocation(F2{0, 0}), m.grid.GetSize(F2{10, 38}))
-	m.AddView(verse)
-
-	list := NewList("Scene Statistics", m.grid.GetLocation(F2{10, 7}), m.grid.GetSize(F2{2, 10}))
-	verse.stats = &list
-	m.AddView(&list)
-
-	widget := &fpsWidget{
-		location:    m.grid.GetLocation(F2{10, 0}),
-		size:        m.grid.GetSize(F2{2, 7}),
-		updateDelta: 0,
-		renderDelta: 0,
-	}
-	m.AddView(widget)
-
-	perf := &Performance{
-		location: m.grid.GetLocation(F2{10, 17}),
-		size:     m.grid.GetSize(F2{2, 5}),
-	}
-	m.AddView(perf)
-
 	m.running = true
 
-	logicInterval := 1000.0 / 120.0 // ms
+	logicInterval := 1000.0 / 60.0 // ms
 	updateClock := 0.0
 
-	renderInterval := 1000.0 / 60.0 // ms
+	renderInterval := 1000.0 / 120.0 // ms
 	renderClock := 0.0
 
 	delta := 0.0
 	prevTime := 0.0
 
 	for m.running {
+
 		delta = float64(sdl.GetTicks()) - prevTime
 		prevTime = float64(sdl.GetTicks())
 
 		updateClock += delta
+		renderClock += delta
+		wg := new(sync.WaitGroup)
 		for updateClock > logicInterval {
 
+			wg.Add(len(m.views))
 			for _, view := range m.views {
-				view.Update()
+				go func(v View) {
+					v.Update()
+					wg.Done()
+				}(view)
 			}
 			updateClock -= logicInterval
-
+			wg.Wait()
 		}
-
-		renderClock += delta
 		if renderClock > renderInterval {
 			m.HandleEvents()
 			m.graphics.Clear()
@@ -150,6 +163,7 @@ func (m *Monoverse) Run() {
 			m.graphics.Render()
 			renderClock = 0
 		}
+
 	}
 }
 
@@ -170,7 +184,7 @@ func (m *Monoverse) HandleEvents() {
 		case *sdl.MouseWheelEvent:
 		case *sdl.WindowEvent:
 			if t.Type == sdl.WINDOWEVENT_RESIZED {
-
+				// Some day
 			}
 			break
 		}
