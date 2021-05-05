@@ -11,6 +11,7 @@ import (
 
 type Graphics struct {
 	window   *sdl.Window
+	program  uint32
 	renderer *sdl.Renderer
 	font     *ttf.Font
 	ctx      sdl.GLContext
@@ -47,56 +48,70 @@ func (g *Graphics) configure() (err error) {
 	g.font = g.loadFont("JetBrainsMono-Medium.ttf", 24)
 
 	gl.Viewport(0, 0, int32(g.size.X*2), int32(g.size.Y*2))
-	gl.DepthRange(-2048, 2048)
 
 	gl.MatrixMode(gl.PROJECTION)
 	gl.LoadIdentity()
 
-	gl.Ortho(0, g.size.X, g.size.Y, 0, -2048, 2048)
+	gl.Ortho(0, g.size.X, g.size.Y, 0, -4096, 4096)
 
 	gl.MatrixMode(gl.MODELVIEW)
 
 	gl.Enable(gl.DOUBLEBUFFER)
 
+	program, err := newProgramShader("/vertex.glsl", "/fragment.glsl")
+	if err != nil {
+		return err
+	}
+	gl.UseProgram(program)
+
 	return nil
 }
 
 func (g *Graphics) Circle(n F3, m F3) {
-	gl.Begin(gl.LINES)
-	for r := 0.0; r < 720; r++ {
-		gl.Vertex3f(float32(n.X+math.Cos(r)*m.X), float32(n.Y+math.Sin(r)*m.Y), float32(n.Z))
+	gl.PushMatrix()
+	gl.Scalef(float32(m.X), float32(m.Y), float32(m.Z))
+	gl.Begin(gl.LINE_LOOP)
+	for r := 0.0; r < 360; r += 1 {
+		gl.Vertex3f(float32(n.X+math.Cos(r)), float32(n.Y+math.Sin(r)), float32(n.Z))
 	}
 	gl.End()
+	gl.Begin(gl.LINE_LOOP)
+	for r := 0.0; r < 360; r += 0.2 {
+		gl.Vertex3f(float32(n.X), float32(n.Y+math.Cos(r)), float32(n.Z+math.Sin(r)))
+	}
+	gl.End()
+	gl.PopMatrix()
 }
 
 func (g *Graphics) RenderView(view View) {
+	gl.Enable(gl.BLEND)
+
+	gl.Enable(gl.DEPTH_TEST)
+
+	gl.ClearColor(0, 0, 0, 1)
+	gl.ClearDepth(1)
+
+	gl.MatrixMode(gl.MODELVIEW)
+	gl.LoadIdentity()
 
 	gl.PushMatrix()
-	gl.MatrixMode(gl.MODELVIEW)
-
 	gl.Translatef(float32(view.GetLocation().X), float32(view.GetLocation().Y), 0)
-
-	g.DrawFrame(view.GetName(), view)
-
-	// 	gl.Scissor(int32(view.GetLocation().X + 2)*2, int32((view.GetLocation().Y  + g.size.Y) - view.GetLocation().Y)*2,
-	//		int32(view.GetSize().X - 4)*2,
-	//		int32(view.GetSize().Y - 28 - 1)*2)
 	location := view.GetLocation()
 	size := view.GetSize()
-	gl.Translatef(0, 28, 0)
-	// gl.Scissor(0, 0, int32(size.X)*2,
-	// 	int32(size.Y)*2)
 	gl.Scissor(int32(location.X+2)*2, int32((g.size.Y-(location.Y))-size.Y-25)*2, int32(size.X)*2,
 		int32(size.Y)*2)
-	gl.Enable(gl.BLEND)
+	g.DrawFrame(view.GetName(), view)
+	gl.Translatef(0, 28, 0)
 	gl.Enable(gl.SCISSOR_TEST)
 
 	view.Draw(g)
 
 	gl.Disable(gl.SCISSOR_TEST)
-	gl.Disable(gl.BLEND)
-
 	gl.PopMatrix()
+
+	gl.Disable(gl.DEPTH_TEST)
+
+	gl.Disable(gl.BLEND)
 
 }
 
@@ -391,8 +406,6 @@ func (g *Graphics) Cube(n F3, m F3) {
 	gl.Scalef(float32(m.X), float32(m.Y), float32(m.Z))
 
 	gl.Begin(gl.QUADS)
-
-	gl.Color3f(1.0, 1.0, 1.0) // Green
 	gl.Vertex3f(1.0, 1.0, -1.0)
 	gl.Vertex3f(-1.0, 1.0, -1.0)
 	gl.Vertex3f(-1.0, 1.0, 1.0)

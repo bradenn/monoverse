@@ -61,7 +61,7 @@ func (m *Monoverse) Configure() {
 		bounds: m.grid.GetBounds(F2{0, 33}, F2{10, 4}),
 	}
 	verse.timer = timer
-	m.AddView(timer)
+	// m.AddView(timer)
 
 	widget := &fpsWidget{
 		location:    m.grid.GetLocation(F2{10, 0}),
@@ -119,12 +119,16 @@ func (m *Monoverse) Run() {
 
 	m.Configure()
 
+	timer := &Timer{
+		bounds: m.grid.GetBounds(F2{0, 33}, F2{10, 4}),
+	}
+	m.AddView(timer)
+
 	m.running = true
 
-	logicInterval := 1000.0 / 60.0 // ms
 	updateClock := 0.0
 
-	renderInterval := 1000.0 / 120.0 // ms
+	renderInterval := 1000.0 / 60.0 // ms
 	renderClock := 0.0
 
 	delta := 0.0
@@ -137,33 +141,32 @@ func (m *Monoverse) Run() {
 
 		updateClock += delta
 		renderClock += delta
-		wg := new(sync.WaitGroup)
-		for updateClock > logicInterval {
 
-			wg.Add(len(m.views))
-			for _, view := range m.views {
-				go func(v View) {
-					v.Update()
-					wg.Done()
-				}(view)
+		wg := new(sync.WaitGroup)
+		// Since the duration of the update cycle can range from nanoseconds to hours or days,
+		// so instead of a fixed frame rate, we run this for loop for as long as a rendered frame is not due.
+		for renderClock < renderInterval {
+			for i := 0; i < 1; i++ {
+				wg.Add(len(m.views))
+				for _, view := range m.views {
+					go func(v View) {
+						v.Update()
+						wg.Done()
+					}(view)
+				}
+				wg.Wait()
 			}
-			updateClock -= logicInterval
-			wg.Wait()
+			renderClock += float64(sdl.GetTicks()) - prevTime
 		}
 		if renderClock > renderInterval {
 			m.HandleEvents()
 			m.graphics.Clear()
-
-			m.grid.Draw(m.graphics)
-
 			for _, view := range m.views {
 				m.graphics.RenderView(view)
 			}
-
 			m.graphics.Render()
 			renderClock = 0
 		}
-
 	}
 }
 

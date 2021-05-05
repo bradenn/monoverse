@@ -4,8 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"runtime"
 	"time"
 )
+
+func init() {
+	runtime.LockOSThread()
+}
 
 func main() {
 	start := time.Now()

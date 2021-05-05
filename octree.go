@@ -5,6 +5,7 @@ type Voxel struct {
 }
 
 func (v *Voxel) Draw(g *Graphics) {
+	g.Color(0.5, 0.5, 0.5, 1)
 	g.Tet(v.location, v.size)
 }
 
@@ -52,34 +53,38 @@ type Octree struct {
 	children []*Octree
 }
 
-func (o *Octree) ApplyForces(force Force, object Object) {
-	physics := Physics{}
+func (o *Octree) ApplyForces(physics *Physics, object Object) {
 	if o.node != nil {
 		if o.children == nil { // External Node
 			if o.node != object {
-				object.SetForce(physics.AddForce(force, object, o.node))
+				physics.AddForce(object, o.node)
 			}
 		} else { // Internal Node
 			theta := (o.voxel.size.X) / Distance(o.node, object)
-			if theta < 0.9 {
-				object.SetForce(physics.AddForce(force, object, o.node))
+			if theta < 1.5 {
+				physics.AddForce(object, o.node)
 			} else {
 				for _, child := range o.children {
-					child.ApplyForces(force, object)
+					child.ApplyForces(physics, object)
 				}
 			}
 		}
 	}
 }
 
-func (o *Octree) Draw(g *Graphics) {
+func (o *Octree) Draw(g *Graphics, depth int) {
+	depth++
+	if depth > 4 {
+		return
+	}
+
 	if o.node != nil {
-		g.Color(0.4, 0.4, 0.4, 0.4)
+		g.Color(0.2, 0.2, 0.2, 0.2)
 		o.voxel.Draw(g)
 	}
 	if o.children != nil {
 		for _, child := range o.children {
-			child.Draw(g)
+			child.Draw(g, depth)
 		}
 	}
 }
