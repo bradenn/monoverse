@@ -8,14 +8,15 @@ This project was retired and replaced by bradenn/nbodies.
 
 ### Hexagonal Cellular Automata
 ![Screen Shot 2021-05-17 at 21.41.16 PM.png](./docs%2FScreen%20Shot%202021-05-17%20at%2021.41.16%20PM.png)
-![img_2.png](./docs/img_2.png)
 
-### Unbounded Hexagonal Cellular Automata
-![img.png](img.png)
+### Barnes Hut N-Bodies approximation
+![Screen Shot 2021-04-27 at 11.17.05 AM.png](docs%2FScreen%20Shot%202021-04-27%20at%2011.17.05%20AM.png)
 
 ### Generic Instancing
 ![img_1.png](./docs/img_1.png)
 
+### Unbounded Hexagonal Cellular Automata
+![img.png](img.png)
 
 ### Performance Monitoring
 ![img.png](./docs/img.png)
