@@ -61,7 +61,7 @@ func (o *Octree) ApplyForces(physics *Physics, object Object) {
 			}
 		} else { // Internal Node
 			theta := (o.voxel.size.X) / Distance(o.node, object)
-			if theta < 1.5 {
+			if theta < 1.2 {
 				physics.AddForce(object, o.node)
 			} else {
 				for _, child := range o.children {
@@ -97,7 +97,6 @@ func (o *Octree) Push(object Object) {
 			return
 		}
 	}
-
 }
 
 func (o *Octree) Insert(object Object) {

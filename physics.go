@@ -4,59 +4,9 @@ import (
 	"fmt"
 	"github.com/veandco/go-sdl2/sdl"
 	"math"
-	"math/rand"
+	"runtime"
 	"sync"
 )
-
-type Force interface {
-	Apply(n Object, m Object) float64
-	Draw(object Object, graphics *Graphics)
-}
-
-type Gravity struct{}
-
-func (g *Gravity) Draw(object Object, graphics *Graphics) {
-	force := g.Apply(object, &Matter{
-		location: object.GetLocation(),
-		velocity: F3{},
-		force:    F3{},
-		mass:     100,
-		density:  0,
-		volume:   0,
-		charge:   1,
-	})
-	fAdj := MapF2(force, F2{0e-6, 0e-5}, F2{0, 2})
-	fmt.Println(fAdj)
-	graphics.Circle(object.GetLocation(), F3{fAdj, fAdj, fAdj})
-}
-
-func (g *Gravity) GetConstant() float64 {
-	return 6.674e-11
-}
-
-func (g *Gravity) Apply(n Object, m Object) float64 {
-	distance := Distance(n, m)
-	numerator := g.GetConstant() * n.GetMass() * m.GetMass()
-	force := numerator / (math.Pow(distance, 2) + math.Pow(D, 2))
-	return force
-}
-
-type Electromagnetic struct{}
-
-func (g *Electromagnetic) Draw(object Object, graphics *Graphics) {
-
-}
-
-func (g *Electromagnetic) GetConstant() float64 {
-	return 8.98e9
-}
-
-func (g *Electromagnetic) Apply(n Object, m Object) float64 {
-	distance := Distance(n, m)
-	numerator := g.GetConstant() * n.GetCharge() * m.GetCharge()
-	force := numerator / (math.Pow(distance, 2) + math.Pow(D, 2))
-	return force
-}
 
 type Locatable interface {
 	GetLocation() F3
@@ -89,6 +39,7 @@ type Object interface {
 
 	GetVolume(f float64)
 	SetVolume() float64
+	GetRadius() float64
 	Draw(g *Graphics)
 }
 
@@ -135,8 +86,9 @@ type Physics struct {
 func (p *Physics) Tick() {
 	p.stack.Start()
 	p.ticks += p.delta
+
 	p.stack.Flag("Octree")
-	p.getFurthestPoint()
+	// p.getFurthestPoint()
 	p.octree = &Octree{voxel: Voxel{
 		location: F3{0, 0, 0},
 		size:     F3{p.radius, p.radius, p.radius},
@@ -160,9 +112,7 @@ func (p *Physics) Tick() {
 
 	p.stack.Flag("Apply")
 	for _, object := range p.matter {
-		loc, vel := p.UpdatePosition(object, p.ticks)
-		object.SetLocation(loc)
-		object.SetVelocity(vel)
+		p.UpdatePosition(object, p.ticks)
 	}
 	p.stack.Flag("End")
 	p.stack.End()
@@ -199,22 +149,58 @@ func (p *Physics) HandleEvent(event sdl.Event) {
 }
 
 func (p *Physics) Configure() {
-	// p.forces = append(p.forces, &Gravity{})
 	p.forces = append(p.forces, &Electromagnetic{})
+	p.forces = append(p.forces, &Strong{})
 	p.stack = new(SlipStack)
 
 	p.delta = 0.01
-	p.radius = 4096
-	diam := p.radius
-	// 1 lightyear = 1 pixel
-	for x := 0.0; x < 2048; x += 1 {
-		matter := new(Matter)
-		matter.mass = ((5.9e30) * rand.Float64()) * 5.291005291e-17
-		matter.charge = 250 - 500*rand.Float64()
-		matter.location = F3{diam/2 - rand.Float64()*(diam), diam/2 - rand.Float64()*(diam),
-			diam/2 - rand.Float64()*(diam)}
-		p.matter = append(p.matter, matter)
-	}
+	p.radius = 8
+	// diam := 200.0
+	// rand.Seed(int64(time.Now().Nanosecond()))
+	// Protons
+	// for x := 0.0; x < 200; x += 1 {
+	// 	matter := new(Matter)
+	// 	matter.mass = 10
+	// 	matter.charge = 0
+	// 	matter.location = F3{diam/2 - rand.Float64()*(diam), diam/2 - rand.Float64()*(diam),
+	// 		diam/2 - rand.Float64()*(diam)}
+	// 	p.matter = append(p.matter, matter)
+	// }
+	p.matter = append(p.matter, &Matter{
+		location: F3{0, 0, 0},
+		velocity: F3{0, 0, 0},
+		force:    F3{0, 0, 0},
+		mass:     1,
+		radius:   1,
+		density:  0,
+		volume:   0,
+		charge:   0.6666666667,
+		history:  nil,
+	})
+
+	p.matter = append(p.matter, &Matter{
+		location: F3{1, 0, 0},
+		velocity: F3{0, 0, 0},
+		force:    F3{0, 0, 0},
+		mass:     1,
+		radius:   1,
+		density:  0,
+		volume:   0,
+		charge:   0.6666666667,
+		history:  nil,
+	})
+	p.matter = append(p.matter, &Matter{
+		location: F3{0, 1, 0},
+		velocity: F3{0, 0, 0},
+		force:    F3{0, 0, 0},
+		mass:     1,
+		radius:   1,
+		density:  0,
+		volume:   0,
+		charge:   -0.333333334,
+		history:  nil,
+	})
+
 	p.ticks = 0
 	// panic("implement me")
 }
@@ -244,6 +230,7 @@ func (p *Physics) Draw(g *Graphics) {
 	list.AddItem(NewItem("Verse", "+"))
 	list.AddItem(NewItem("    Matter", fmt.Sprintf("%d OBJ", len(p.matter))))
 	list.AddItem(NewItem("    Radius", fmt.Sprintf("%.2f LY", p.radius)))
+	list.AddItem(NewItem("    Go Routines", fmt.Sprintf("%d ANC", runtime.NumGoroutine())))
 	list.AddItem(NewItem("Emergent", "+"))
 	list.AddItem(NewItem("    Ticks", fmt.Sprintf("%.4f", p.ticks)))
 	list.AddItem(NewItem("    Delta", fmt.Sprintf("%.4f", p.delta)))
@@ -259,15 +246,33 @@ func (p *Physics) ResetForces(n Object) {
 	n.SetForce(F3{0, 0, 0})
 }
 
-func (p *Physics) UpdatePosition(n Object, dt float64) (location F3, velocity F3) {
-	mass := n.GetMass()
+func (p *Physics) UpdatePosition(n Object, dt float64) {
+	mass := 1.0
 
 	force := n.GetForce()
 	newVelocity := AddF3(n.GetVelocity(), F3{dt * force.X / mass, dt * force.Y / mass, dt * force.Z / mass})
 
-	velocity = newVelocity
+	velocity := newVelocity
 	newLocation := AddF3(n.GetLocation(), F3{dt * velocity.X, dt * velocity.Y, dt * velocity.Z})
-	return newLocation, newVelocity
+	// cage := 2.0
+	// if DistanceF3(newLocation, F3{}) >= p.radius - 0.1 {
+	// 	v := MulF3(newVelocity, DivF3(AddF3(F3{mass, mass, mass}, F3{cage, cage, cage}), SubF3(F3{mass, mass, mass}, F3{cage, cage, cage})))
+	// 	n.SetVelocity(v)
+	// 	n.SetLocation(AddF3(n.GetLocation(), F3{dt * v.X, dt * v.Y, dt * v.Z}))
+	// } else {
+	//
+	// }
+	n.SetVelocity(newVelocity)
+	n.SetLocation(newLocation)
+}
+
+func DistanceF3(n F3, m F3) float64 {
+	diffs := SubF3(m, n)
+	dist := math.Pow(diffs.X, 2) +
+		math.Pow(diffs.Y, 2) +
+		math.Pow(diffs.Z, 2)
+	sqrt := math.Sqrt(dist)
+	return sqrt
 }
 
 func Distance(n Locatable, m Locatable) float64 {
@@ -309,6 +314,7 @@ func (p *Physics) DrawMap(g *Graphics) {
 
 func (p *Physics) DrawMatter(g *Graphics) {
 	for _, object := range p.matter {
+		p.DrawForces(object, g)
 		object.Draw(g)
 	}
 }

@@ -17,11 +17,13 @@ type Verse struct {
 	name        string
 	octree      *Octree
 	stats       *List
+	grid        [][]bool
 	clocks      F2
 	location    F2
 	perspective F3
 	rotation    F3
 	size        F2
+	world       *World
 	physics     *Physics
 	cursor      *Cursor
 	timer       *Timer
@@ -90,8 +92,13 @@ func (v *Verse) Configure() {
 
 	v.cursor = new(Cursor)
 	v.cursor.location = F3{}
-	v.perspective.Z = 1
+	v.perspective.Z = 1280 / 1280
 
+	v.world = &World{
+		cells: nil,
+		size:  256,
+	}
+	v.world.Populate()
 }
 
 func (v *Verse) Draw(g *Graphics) {
@@ -104,9 +111,6 @@ func (v *Verse) Draw(g *Graphics) {
 			v.rotation.Z)),
 	}
 
-	v.perspective.X += (-v.perspective.X) / 120
-	v.perspective.Y += (-v.perspective.Y) / 120
-
 	gl.PushMatrix()
 
 	gl.MatrixMode(gl.MODELVIEW)
@@ -115,7 +119,7 @@ func (v *Verse) Draw(g *Graphics) {
 	gl.PushMatrix()
 
 	gl.Translatef(2, 28, 0)
-	gl.Color4f(0.01, 0.02, 0.02, 0.1)
+	gl.Color4f(0, 0, 0, 0.1)
 	gl.Scalef(1, 1, 1)
 	gl.Begin(gl.QUADS)
 	gl.Vertex3f(0, 0, -2040)
@@ -164,42 +168,22 @@ func (v *Verse) Draw(g *Graphics) {
 
 	gl.Color4f(1, 1, 1, 0.2)
 
-	gl.Begin(gl.LINES)
-	gl.LineWidth(1)
-	gl.End()
-	// if v.physics.octree != nil {
-	// 	v.physics.octree.Draw(g, 0)
-	//
-	// }
-	diam := float32(math.Max(v.size.X, v.size.Y) * 10)
-	gl.Begin(gl.LINES)
-	gl.LineWidth(1)
-	gl.Color4f(1, 0, 0, 1)
-	gl.Vertex3f(-diam, 0, 0)
-	gl.Vertex3f(diam, 0, 0)
+	lightPosition := []float32{0, 0, 2, 0}
+	gl.Lightfv(gl.LIGHT0, gl.POSITION, &lightPosition[0])
 
-	gl.Color4f(0, 1, 0, 1)
-	gl.Vertex3f(0, -diam, 0)
-	gl.Vertex3f(0, diam, 0)
+	gl.Lightfv(gl.LIGHT0, gl.SPOT_EXPONENT, &[]float32{2}[0])
+	gl.Lightfv(gl.LIGHT0, gl.AMBIENT, &[]float32{0, 0, 0.2, 0.2}[0])
 
-	gl.Color4f(0, 0, 1, 1)
-	gl.Vertex3f(0, 0, -diam)
-	gl.Vertex3f(0, 0, diam)
+	lightAmbient := []float32{0.5, 0.5, 0.5, 0.6}
+	gl.Materialfv(gl.FRONT_AND_BACK, gl.AMBIENT, &lightAmbient[0])
 
-	gl.End()
-	gl.Color4f(1, 1, 1, 1)
-
-	v.physics.DrawMatter(g)
-	// res := 10.0
-
-	//
-	// gl.Color4f(0.9, 0.3, 0.7, 0.4)
-	// g.Circle(F3{0, 0, 0}, F3{800, 800, 0})
+	gl.Translatef(float32(-v.world.size/4), float32(-v.world.size/4), 0)
+	v.world.Draw(g)
 
 	gl.Disable(gl.BLEND)
+
 	gl.PopMatrix()
 
-	v.physics.stack.Draw(g)
 	gl.PopMatrix()
 
 	return
@@ -207,6 +191,6 @@ func (v *Verse) Draw(g *Graphics) {
 
 func (v *Verse) Update() {
 
-	v.physics.Tick()
+	// v.physics.Tick()
 
 }

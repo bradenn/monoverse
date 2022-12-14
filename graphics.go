@@ -25,6 +25,33 @@ func NewGraphics(size F3) (g *Graphics, err error) {
 	return g, err
 }
 
+func (g *Graphics) drawSphere(r float64, lats float64, longs float64) {
+	i := 0.0
+	j := 0.0
+	for i = 0.0; i <= lats; i++ {
+		lat0 := math.Pi * (-0.5 + (i-1)/lats)
+		z0 := math.Sin(lat0)
+		zr0 := math.Cos(lat0)
+
+		lat1 := math.Pi * (-0.5 + i/lats)
+		z1 := math.Sin(lat1)
+		zr1 := math.Cos(lat1)
+
+		gl.Begin(gl.QUAD_STRIP)
+		for j = 0; j <= longs; j++ {
+			lng := 2 * math.Pi * (j - 1) / longs
+			x := math.Cos(lng)
+			y := math.Sin(lng)
+
+			gl.Normal3f(float32(x*zr0), float32(y*zr0), float32(z0))
+			gl.Vertex3f(float32(r*x*zr0), float32(r*y*zr0), float32(r*z0))
+			gl.Normal3f(float32(x*zr1), float32(y*zr1), float32(z1))
+			gl.Vertex3f(float32(r*x*zr1), float32(r*y*zr1), float32(r*z1))
+		}
+		gl.End()
+	}
+}
+
 func (g *Graphics) configure() (err error) {
 
 	err = sdl.Init(sdl.INIT_EVERYTHING)
@@ -274,6 +301,7 @@ func (g *Graphics) TextCenter3D(m string, location F3) {
 
 func (g *Graphics) Color(a, b, c, d float64) {
 	gl.Color4f(float32(a), float32(b), float32(c), float32(d))
+	gl.Materialfv(gl.FRONT_AND_BACK, gl.DIFFUSE, &[]float32{float32(a), float32(b), float32(c), float32(d)}[0])
 }
 func (g *Graphics) Rect(n F2, m F2) {
 
@@ -288,6 +316,18 @@ func (g *Graphics) Rect(n F2, m F2) {
 	// gl.Vertex3f(float32(n.X), float32(n.Y), 0)
 	gl.End()
 }
+
+func (g *Graphics) Hexagon(n F2) {
+	gl.PushMatrix()
+	gl.Translatef(float32(n.X), float32(n.Y), 0)
+	gl.Begin(gl.POLYGON)
+	for i := 0.0; i < 6; i++ {
+		gl.Vertex3f(float32(math.Sin(i/6.0*2*math.Pi)), float32(math.Cos(i/6.0*2*math.Pi)), 0)
+	}
+	gl.End()
+	gl.PopMatrix()
+}
+
 func (g *Graphics) FillRect(n F2, m F2) {
 	gl.Rectf(float32(n.X), float32(n.Y), float32(n.X+m.X), float32(n.Y+m.Y))
 }

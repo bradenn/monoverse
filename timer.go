@@ -49,7 +49,7 @@ func (s *SlipStack) End() {
 func (s *SlipStack) Draw(g *Graphics) {
 	if len(s.flags) > 0 {
 		for i, _ := range s.flags {
-			xLocation := MapF2(float64(i), F2{0, float64(len(s.flags) - 1)}, F2{0, 100})
+			xLocation := MapF2(float64(i), F2{0, float64(len(s.flags) - 1)}, F2{0, 1000})
 			g.Line(F3{0, 10, 0}, F3{0, xLocation, 0})
 		}
 	}
